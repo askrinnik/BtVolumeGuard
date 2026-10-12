@@ -19,44 +19,41 @@ A Windows tray app that stops Bluetooth headsets from jumping to 100% volume whe
 
 ## The problem
 
-With the **LK12** open-ear Bluetooth headset (on any Windows 11 machine), the playback volume is set to, say, 20%, but every time a Microsoft Teams meeting starts, the volume jumps to **100%**. It happens again on every new meeting, so the volume has to be turned down by hand each time.
+On Windows, many Bluetooth headsets jump to **100% volume** every time a call starts. You set the playback volume to, say, 20%, join a Microsoft Teams (or Zoom, Google Meet, Discord…) meeting, and the volume goes to the maximum, again on every new meeting, so it has to be turned down by hand each time.
+
+BtVolumeGuard was written for the **LK12** open-ear Bluetooth headset, where this happens on every Teams call on Windows 11, and is verified with it. The cause is generic, so it should help with other headsets that do the same.
 
 ### Why it happens
 
-A classic Bluetooth headset exposes two audio profiles, which Windows shows as separate playback devices:
+A classic Bluetooth headset has two audio profiles: **A2DP** (stereo, for music and video, no microphone) and **HFP** (Hands-Free, for calls). When a call app opens the headset microphone, Windows switches the headset to HFP. On the HFP connection the headset reports **maximum volume** to Windows (HFP volume sync, `AT+VGS`), and Windows applies it.
 
-| Windows device | Bluetooth profile | When it is used |
-|---|---|---|
-| `Headphones (LK12)` | A2DP (stereo) | Music, video, no microphone |
-| `Headset (LK12 Hands-Free)` | HFP (Hands-Free) | Calls: whenever an app opens the headset microphone |
-
-When Teams opens the microphone, Windows switches the headset to HFP. The `Hands-Free` endpoint exists only during a call. On the HFP connection the headset reports **maximum volume** to Windows (HFP volume sync, `AT+VGS`), and Windows applies it to the endpoint.
+On older setups the two profiles show up as separate playback devices, e.g. `Headphones (LK12)` and `Headset (LK12 Hands-Free)`. On current Windows 11 they are one device, `Headphones (LK12)`, that switches profile inside; Windows even remembers a separate volume for calls, but the headset overrides it half a second later.
 
 ### What did not help
 
 - **Disabling Bluetooth Absolute Volume** (`HKLM\SYSTEM\ControlSet001\Control\Bluetooth\Audio\AVRCP\CT\DisableAbsoluteVolume = 1`). The jump still happened, because Absolute Volume covers AVRCP/A2DP, not HFP. Also Windows could no longer control Bluetooth volume, only the headset buttons could. Reverted.
-- **The headset manual.** It has no "remember volume" or similar setting, only volume buttons and a factory reset.
-- **Avoiding HFP**: using the stereo device in Teams with another microphone, or disabling the Hands-Free service. This removes the jump, but the whole point of the headset is its directional, noise-rejecting microphone, so this is not acceptable.
+- **The headset manual.** The LK12 has no "remember volume" or similar setting, only volume buttons and a factory reset.
+- **Avoiding HFP**: using the stereo device in the call app with another microphone, or disabling the Hands-Free service. This removes the jump, but the whole point of such a headset is its microphone, so this is not acceptable.
 
 The jump is initiated by the headset itself, so Windows settings cannot prevent it. What remains is to **detect the jump and revert it immediately**.
 
 ## The solution
 
-BtVolumeGuard runs in the system tray and watches the volume of the selected Bluetooth playback devices (name mask, `*LK12*` by default):
+BtVolumeGuard runs in the system tray and guards **every Bluetooth playback device** by default; devices can be switched off one by one in the tray menu.
 
 - At the start of a call Windows switches the headset to the call profile and sets the call volume it remembered; about half a second later the headset pushes 100%. BtVolumeGuard recognises that push by its Core Audio event context and restores the volume Windows had set.
-- Any other single-step jump to the maximum (≥ 95%, by at least 20 points) from an unrecognised source is reverted too.
+- Any other single-step jump to the maximum (≥ 95%, by at least 20 points) from an unrecognised source is reverted too. This also covers headsets or Windows versions whose event contexts differ from the ones observed with the LK12; the contexts can be added in the settings file.
 - Changes made by the user (keyboard, volume sliders, headset buttons) are never reverted, even a deliberate move to 100%.
-- If a separate `Hands-Free` device appears already at 100% (seen on other setups), the last known volume or a default of 20% is applied.
+- If a separate `Hands-Free` device appears already at 100%, the last known volume or a default of 20% is applied.
 
 It reacts to Windows Core Audio notifications (via [NAudio](https://github.com/naudio/NAudio)) rather than polling, so the correction should be fast enough to go unnoticed. How the jump was analysed: [`docs/design.md`](docs/design.md).
 
-Everything is in the tray menu (left or right click on the icon): the current headset volume, turning the guard and revert notifications on or off, starting with Windows, the log level, and the log and settings files. The shield in the icon turns grey while the guard is off.
+Everything is in the tray menu (left or right click on the icon): the current headset volume, the **Devices** to guard (every Bluetooth playback device Windows knows; ones that are not connected are shown in grey), turning the guard and revert notifications on or off, starting with Windows, the log level, and the log and settings files. The shield in the icon turns grey while the guard is off.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/tray-menu.png">
-    <img src="docs/screenshots/tray-menu-light.png" alt="Tray menu: Headphones (LK12): 36%, Guard enabled, Notify when a jump is reverted, Start with Windows, Log submenu (Off / Normal / Verbose, Open log, Clear log), Open settings, Reload settings, Exit">
+    <img src="docs/screenshots/tray-menu-light.png" alt="Tray menu: Headphones (LK12): 36%, Devices submenu (Headphones (G2) and Headphones (LK12) guarded, G2 not connected; Speakers (JBL Flip 4) not guarded, not connected), Guard enabled, Notify when a jump is reverted, Start with Windows, Log, Open settings, Reload settings, Exit">
   </picture>
 </p>
 
@@ -66,13 +63,14 @@ A working PowerShell prototype of the same idea is in [`prototype/LK12-VolumeGua
 
 Version 0.1.0, in daily use. Roadmap steps 1–6 are done (see [`docs/design.md`](docs/design.md)):
 
-- The tray app reverts the jump at the start of a call. Verified on real Teams calls, also after the headset was switched off and on again.
+- The tray app reverts the jump at the start of a call. Verified with the LK12 on real Teams calls, also after the headset was switched off and on again. Not yet verified with other headsets; reports are welcome.
+- Every Bluetooth playback device is guarded by default; the tray menu → Devices lists them (also the ones that are not connected) and lets you exclude some. The event contexts that identify the jump can be extended in the settings file.
 - Reverted jumps are logged to `BtVolumeGuard.log` next to the executable (tray menu → Log: level, open, clear; level `Off`, `Normal` or `Verbose`, where `Verbose` also records every volume change with its event context).
 - Settings and remembered volumes are stored as JSON next to the executable (`BtVolumeGuard.settings.json`, `BtVolumeGuard.state.json`).
 - The tray menu shows the current headset volume and lets you turn the guard and revert notifications on or off, start the app with Windows, open the settings and reload them.
 - It is published as a single-file exe; see [Install](#install).
 
-Still open: whether the event contexts the guard relies on stay the same after a reboot, and retiring the PowerShell prototype (roadmap step 7).
+Still open: whether the event contexts the guard relies on stay the same after a reboot and on other machines, and retiring the PowerShell prototype (roadmap step 7).
 
 ## Build and run
 

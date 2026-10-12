@@ -25,6 +25,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon _trayIcon;
     private readonly SynchronizationContext _ui;
     private readonly ToolStripMenuItem _statusItem;
+    private readonly ToolStripMenuItem _devicesItem;
     private readonly ToolStripMenuItem _enabledItem;
     private readonly ToolStripMenuItem _notifyItem;
     private readonly ToolStripMenuItem _startupItem;
@@ -34,7 +35,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private AppSettings _settings = new();
     private bool _settingsFileUsable;
-    private DeviceNameMask _mask = new("*");
+    private DeviceNameMask? _testMask;
     private EndpointVolumeGuard? _guard;
     private bool _exiting;
 
@@ -45,6 +46,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _log = new FileLog(FileLog.DefaultPath);
 
         _statusItem = new ToolStripMenuItem { Enabled = false };
+        _devicesItem = new ToolStripMenuItem("Devices");
+        _devicesItem.DropDownItems.Add(new ToolStripMenuItem("…") { Enabled = false });
+        _devicesItem.DropDownOpening += (_, _) => UpdateDevicesMenu();
         _enabledItem = new ToolStripMenuItem("Guard enabled", null, (_, _) => ToggleGuard());
         _notifyItem = new ToolStripMenuItem("Notify when a jump is reverted", null, (_, _) => ToggleNotify());
         _startupItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleStartup());
@@ -64,6 +68,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         [
             _statusItem,
             new ToolStripSeparator(),
+            _devicesItem,
             _enabledItem,
             _notifyItem,
             _startupItem,
@@ -116,8 +121,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _log.Write(memoryProblem);
         }
 
-        _mask = new DeviceNameMask(string.IsNullOrWhiteSpace(_maskOverride) ? _settings.DeviceMask : _maskOverride);
-        _guard = new EndpointVolumeGuard(_mask, _settings.ToPolicy(), memory, _log) { Enabled = _settings.GuardEnabled };
+        _testMask = string.IsNullOrWhiteSpace(_maskOverride) ? null : new DeviceNameMask(_maskOverride);
+        _guard = new EndpointVolumeGuard(
+            _settings.ToSelection(_testMask), _settings.ToPolicy(), _settings.ToContexts(), memory, _log)
+        {
+            Enabled = _settings.GuardEnabled,
+        };
         _guard.StatusChanged += () => _ui.Post(_ => UpdateTooltip(), null);
         _guard.Reverted += info => _ui.Post(_ => OnReverted(info), null);
         _guard.Start();
@@ -218,6 +227,47 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _startupItem.Checked = StartupRegistration.IsEnabled();
     }
 
+    // Every Bluetooth playback device Windows knows, connected or not; disconnected ones stay
+    // clickable but are drawn in the grey text colour.
+    private void UpdateDevicesMenu()
+    {
+        _devicesItem.DropDownItems.Clear();
+        IReadOnlyList<KnownDevice> devices = _guard?.Devices ?? [];
+        if (devices.Count == 0)
+        {
+            string empty = _testMask is { } mask ? $"No device matches {mask}" : "No Bluetooth playback devices";
+            _devicesItem.DropDownItems.Add(new ToolStripMenuItem(empty) { Enabled = false });
+            return;
+        }
+
+        foreach (KnownDevice device in devices)
+        {
+            var item = new ToolStripMenuItem(device.Name, null, (_, _) => ToggleDevice(device))
+            {
+                Checked = device.Guarded,
+                ToolTipText = device.Connected ? "Connected" : "Not connected",
+            };
+            if (!device.Connected)
+            {
+                item.ForeColor = SystemColors.GrayText;
+            }
+
+            _devicesItem.DropDownItems.Add(item);
+        }
+    }
+
+    private void ToggleDevice(KnownDevice device)
+    {
+        if (_guard is null)
+        {
+            return;
+        }
+
+        DeviceSelection selection = _guard.Selection.WithGuarded(device.Name, !device.Guarded);
+        SaveSettings(_settings with { ExcludedDevices = [.. selection.ExcludedNames.Order(StringComparer.OrdinalIgnoreCase)] });
+        _guard.SetSelection(selection);
+    }
+
     private void UpdateLogMenu()
     {
         foreach (ToolStripMenuItem item in _logLevelItems)
@@ -245,7 +295,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         IReadOnlyList<EndpointStatus> endpoints = _guard?.Status ?? [];
         return endpoints.Count == 0
-            ? $"No active device matches {_mask}"
+            ? _testMask is { } mask ? $"No active device matches {mask}" : "No guarded device connected"
             : string.Join(separator, endpoints.Select(e => $"{e.Name}: {e.Volume}%{(e.Muted ? " (muted)" : "")}"));
     }
 

@@ -21,8 +21,20 @@ public sealed record AppSettings
         Converters = { new JsonStringEnumConverter() },
     };
 
-    /// <summary>Wildcard mask of playback endpoint names to guard.</summary>
-    public string DeviceMask { get; init; } = "*LK12*";
+    /// <summary>
+    /// Bluetooth playback devices (friendly names) that are not guarded. All other Bluetooth
+    /// playback devices are. Changed from the tray menu.
+    /// </summary>
+    public IReadOnlyList<string> ExcludedDevices { get; init; } = [];
+
+    /// <summary>Event contexts of Windows switching a Bluetooth headset between A2DP and HFP.</summary>
+    public IReadOnlyList<Guid> ProfileSwitchContexts { get; init; } = [VolumeChangeContexts.DefaultProfileSwitch];
+
+    /// <summary>Event contexts of volume reported by the headset through the Bluetooth driver.</summary>
+    public IReadOnlyList<Guid> HeadsetDriverContexts { get; init; } = [VolumeChangeContexts.DefaultHeadsetDriver];
+
+    /// <summary>Event contexts of deliberate user changes besides the empty GUID (keyboard keys).</summary>
+    public IReadOnlyList<Guid> UserContexts { get; init; } = [VolumeChangeContexts.DefaultTaskbarSlider];
 
     /// <summary>Volume (%) at or above which a value counts as "maximum".</summary>
     public int MaxThreshold { get; init; } = 95;
@@ -51,12 +63,34 @@ public sealed record AppSettings
     public VolumeJumpPolicy ToPolicy() =>
         new(MaxThreshold, MinJump, DefaultVolume, TimeSpan.FromMilliseconds(ProfileSwitchWindowMs));
 
+    /// <param name="testMask">From the command line: guard endpoints of any kind whose name matches.</param>
+    public DeviceSelection ToSelection(DeviceNameMask? testMask = null) => new(ExcludedDevices, testMask);
+
+    public VolumeChangeContexts ToContexts() => new(ProfileSwitchContexts, HeadsetDriverContexts, UserContexts);
+
     /// <summary>Throws <see cref="ArgumentException"/> if any value is invalid.</summary>
     public void Validate()
     {
-        _ = new DeviceNameMask(DeviceMask);
         _ = ToPolicy();
+        if (ExcludedDevices is null || ProfileSwitchContexts is null || HeadsetDriverContexts is null || UserContexts is null)
+        {
+            throw new ArgumentException("Lists must not be null; use [] for an empty list.");
+        }
     }
+
+    // Lists compare by content, so that settings read from a file equal the same values in code.
+    public bool Equals(AppSettings? other) =>
+        other is not null
+        && ExcludedDevices.SequenceEqual(other.ExcludedDevices)
+        && ProfileSwitchContexts.SequenceEqual(other.ProfileSwitchContexts)
+        && HeadsetDriverContexts.SequenceEqual(other.HeadsetDriverContexts)
+        && UserContexts.SequenceEqual(other.UserContexts)
+        && (MaxThreshold, MinJump, DefaultVolume, ProfileSwitchWindowMs, GuardEnabled, NotifyOnRevert, LogLevel)
+            == (other.MaxThreshold, other.MinJump, other.DefaultVolume, other.ProfileSwitchWindowMs,
+                other.GuardEnabled, other.NotifyOnRevert, other.LogLevel);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(ExcludedDevices.Count, MaxThreshold, MinJump, DefaultVolume, ProfileSwitchWindowMs, GuardEnabled, NotifyOnRevert, LogLevel);
 
     /// <summary>
     /// Loads settings from <paramref name="path"/>. A missing file is created with defaults so it

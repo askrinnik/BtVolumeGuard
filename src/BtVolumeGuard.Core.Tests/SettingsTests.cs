@@ -1,3 +1,4 @@
+using BtVolumeGuard.Core;
 using BtVolumeGuard.Core.Logging;
 using BtVolumeGuard.Core.Settings;
 
@@ -30,8 +31,9 @@ public sealed class SettingsTests : IDisposable
         string path = PathOf(AppSettings.FileName);
         File.WriteAllText(path, """
             {
-              // headset of a colleague
-              "DeviceMask": "*WH-1000*",
+              // the speaker is shared with the family, leave it alone
+              "ExcludedDevices": [ "Speakers (JBL Flip 4)" ],
+              "HeadsetDriverContexts": [ "0de6c1af-c506-4e60-bd8c-f3b00097de2a", "11111111-2222-3333-4444-555555555555" ],
               "DefaultVolume": 30,
               "LogLevel": "Verbose",
             }
@@ -40,17 +42,37 @@ public sealed class SettingsTests : IDisposable
         (AppSettings settings, string? problem) = AppSettings.Load(path);
 
         Assert.Null(problem);
-        Assert.Equal("*WH-1000*", settings.DeviceMask);
+        Assert.Equal(["Speakers (JBL Flip 4)"], settings.ExcludedDevices);
+        Assert.Equal(2, settings.HeadsetDriverContexts.Count);
+        Assert.Equal([VolumeChangeContexts.DefaultProfileSwitch], settings.ProfileSwitchContexts);
         Assert.Equal(30, settings.DefaultVolume);
         Assert.Equal(LogLevel.Verbose, settings.LogLevel);
         Assert.Equal(95, settings.MaxThreshold);
         Assert.Equal(TimeSpan.FromSeconds(2), settings.ToPolicy().ProfileSwitchWindow);
+        Assert.Equal(
+            VolumeChangeSource.HeadsetDriver,
+            settings.ToContexts().Classify(new Guid("11111111-2222-3333-4444-555555555555")));
+        Assert.False(settings.ToSelection().IsGuarded("Speakers (JBL Flip 4)", isBluetooth: true));
+    }
+
+    [Fact]
+    public void Settings_from_version_0_1_0_with_a_device_mask_still_load()
+    {
+        string path = PathOf(AppSettings.FileName);
+        File.WriteAllText(path, """{ "DeviceMask": "*LK12*", "NotifyOnRevert": true }""");
+
+        (AppSettings settings, string? problem) = AppSettings.Load(path);
+
+        Assert.Null(problem);
+        Assert.True(settings.NotifyOnRevert);
+        Assert.Empty(settings.ExcludedDevices);
     }
 
     [Theory]
     [InlineData("{ not json")]
     [InlineData("""{ "DefaultVolume": 99 }""")]
-    [InlineData("""{ "DeviceMask": "" }""")]
+    [InlineData("""{ "ExcludedDevices": null }""")]
+    [InlineData("""{ "UserContexts": [ "not a guid" ] }""")]
     [InlineData("""{ "LogLevel": "Loud" }""")]
     public void Invalid_settings_file_gives_defaults_and_a_problem_and_is_kept(string content)
     {

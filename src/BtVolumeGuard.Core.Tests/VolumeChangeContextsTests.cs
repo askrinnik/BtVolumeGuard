@@ -4,6 +4,8 @@ namespace BtVolumeGuard.Core.Tests;
 
 public class VolumeChangeContextsTests
 {
+    private readonly VolumeChangeContexts _defaults = new();
+
     [Theory]
     [InlineData("00000000-0000-0000-0000-000000000000", VolumeChangeSource.User)]
     [InlineData("355c8163-187b-45d8-9882-61afb3537f61", VolumeChangeSource.User)]
@@ -11,6 +13,26 @@ public class VolumeChangeContextsTests
     [InlineData("0de6c1af-c506-4e60-bd8c-f3b00097de2a", VolumeChangeSource.HeadsetDriver)]
     [InlineData("7d3f8a52-6c1e-4b8e-9a0d-2f5b1c9e4a17", VolumeChangeSource.Own)]
     [InlineData("12345678-1234-1234-1234-123456789abc", VolumeChangeSource.Unknown)]
-    public void Context_is_classified(string context, VolumeChangeSource expected) =>
-        Assert.Equal(expected, VolumeChangeContexts.Classify(Guid.Parse(context)));
+    public void Context_is_classified_with_the_observed_defaults(string context, VolumeChangeSource expected) =>
+        Assert.Equal(expected, _defaults.Classify(Guid.Parse(context)));
+
+    [Fact]
+    public void Contexts_from_settings_replace_the_defaults()
+    {
+        var other = new Guid("12345678-1234-1234-1234-123456789abc");
+        var contexts = new VolumeChangeContexts(profileSwitch: [other], headsetDriver: [], user: []);
+
+        Assert.Equal(VolumeChangeSource.ProfileSwitch, contexts.Classify(other));
+        Assert.Equal(VolumeChangeSource.Unknown, contexts.Classify(VolumeChangeContexts.DefaultProfileSwitch));
+        Assert.Equal(VolumeChangeSource.Unknown, contexts.Classify(VolumeChangeContexts.DefaultTaskbarSlider));
+    }
+
+    [Fact]
+    public void Empty_context_and_own_context_cannot_be_reconfigured()
+    {
+        var contexts = new VolumeChangeContexts(profileSwitch: [], headsetDriver: [], user: []);
+
+        Assert.Equal(VolumeChangeSource.User, contexts.Classify(Guid.Empty));
+        Assert.Equal(VolumeChangeSource.Own, contexts.Classify(VolumeChangeContexts.Own));
+    }
 }

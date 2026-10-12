@@ -9,8 +9,8 @@ using NAudio.CoreAudioApi;
 namespace BtVolumeGuard.Core.Audio;
 
 /// <summary>
-/// Watches playback endpoints whose name matches a mask and reverts headset-induced jumps to
-/// maximum volume (decisions by <see cref="EndpointGuard"/>). Logs endpoint arrival, removal,
+/// Watches the selected playback endpoints (by default every Bluetooth one, see
+/// <see cref="DeviceSelection"/>) and reverts headset-induced jumps to maximum volume (decisions by <see cref="EndpointGuard"/>). Logs endpoint arrival, removal,
 /// state changes and reverted jumps; at verbose level also every volume change with its event context.
 /// </summary>
 /// <remarks>
@@ -24,14 +24,18 @@ public sealed class EndpointVolumeGuard : IDisposable
 {
     private static readonly TimeSpan s_safetyPollInterval = TimeSpan.FromSeconds(2);
 
-    private readonly DeviceNameMask _mask;
     private readonly VolumeJumpPolicy _policy;
+    private readonly VolumeChangeContexts _contexts;
     private readonly ILog _log;
     private readonly TimeProvider _time;
     private readonly BlockingCollection<Action> _queue = [];
     private readonly Dictionary<string, WatchedEndpoint> _watched = [];
     private readonly VolumeMemory _memory;
+    private readonly Dictionary<string, bool> _isBluetooth = [];
     private readonly Thread _worker;
+
+    private volatile DeviceSelection _selection;
+    private volatile KnownDevice[] _devices = [];
 
     private volatile bool _enabled = true;
     private volatile EndpointStatus[] _status = [];
@@ -40,10 +44,16 @@ public sealed class EndpointVolumeGuard : IDisposable
     private MMDeviceNotificationClient? _deviceNotifications;
 
     public EndpointVolumeGuard(
-        DeviceNameMask mask, VolumeJumpPolicy policy, VolumeMemory memory, ILog log, TimeProvider? time = null)
+        DeviceSelection selection,
+        VolumeJumpPolicy policy,
+        VolumeChangeContexts contexts,
+        VolumeMemory memory,
+        ILog log,
+        TimeProvider? time = null)
     {
-        _mask = mask;
+        _selection = selection;
         _policy = policy;
+        _contexts = contexts;
         _memory = memory;
         _log = log;
         _time = time ?? TimeProvider.System;
@@ -53,7 +63,7 @@ public sealed class EndpointVolumeGuard : IDisposable
     /// <summary>Raised on the worker thread after the guard reverted a jump.</summary>
     public event Action<RevertInfo>? Reverted;
 
-    /// <summary>Raised on the worker thread when <see cref="Status"/> changes.</summary>
+    /// <summary>Raised on the worker thread when <see cref="Status"/> or <see cref="Devices"/> changes.</summary>
     public event Action? StatusChanged;
 
     /// <summary>
@@ -79,6 +89,21 @@ public sealed class EndpointVolumeGuard : IDisposable
 
     /// <summary>Watched endpoints and their volume; safe to read from any thread.</summary>
     public IReadOnlyList<EndpointStatus> Status => _status;
+
+    /// <summary>Devices offered in the tray menu, connected or not; safe to read from any thread.</summary>
+    public IReadOnlyList<KnownDevice> Devices => _devices;
+
+    public DeviceSelection Selection => _selection;
+
+    /// <summary>Changes which devices are guarded; applied on the worker thread. Can be called from any thread.</summary>
+    public void SetSelection(DeviceSelection selection) =>
+        Enqueue(() =>
+        {
+            _selection = selection;
+            _log.Write($"Devices: {selection}.");
+            RefreshDevices(logEndpoints: false);
+            Synchronize(isStartup: true, fromSafetyPoll: false);
+        });
 
     public void Start() => _worker.Start();
 
@@ -139,7 +164,7 @@ public sealed class EndpointVolumeGuard : IDisposable
     private void Initialize()
     {
         _log.Write(
-            $"Guard started. Mask '{_mask}', maximum >= {_policy.MaxThreshold}%, jump >= {_policy.MinJump}%, " +
+            $"Guard started. Devices: {_selection}. Maximum >= {_policy.MaxThreshold}%, jump >= {_policy.MinJump}%, " +
             $"default {_policy.DefaultVolume}%, profile switch window {_policy.ProfileSwitchWindow.TotalSeconds:0.#} s." +
             (_enabled ? "" : " Guard is OFF: jumps are not reverted."));
 
@@ -157,7 +182,7 @@ public sealed class EndpointVolumeGuard : IDisposable
             }
         };
 
-        LogAllMatchingEndpoints();
+        RefreshDevices(logEndpoints: true);
         Synchronize(isStartup: true, fromSafetyPoll: false);
     }
 
@@ -186,19 +211,97 @@ public sealed class EndpointVolumeGuard : IDisposable
         }
     }
 
-    /// <summary>Startup snapshot of every matching render endpoint in any state.</summary>
-    private void LogAllMatchingEndpoints()
+    /// <summary>
+    /// Rebuilds <see cref="Devices"/>: every candidate render endpoint in any state (so that a
+    /// switched-off headset stays in the menu), one entry per friendly name.
+    /// </summary>
+    private void RefreshDevices(bool logEndpoints)
     {
+        DeviceSelection selection = _selection;
+        var byName = new Dictionary<string, (bool Connected, bool IsBluetooth)>(StringComparer.OrdinalIgnoreCase);
+
         foreach (MMDevice device in _enumerator!.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.All))
         {
             using (device)
             {
                 string name = TryGetName(device);
-                if (_mask.IsMatch(name))
+                bool isBluetooth = IsBluetooth(device);
+                if (name.Length == 0 || !selection.IsCandidate(name, isBluetooth))
                 {
-                    _log.Write($"Endpoint '{name}' state {device.State}, id {device.ID}");
+                    continue;
                 }
+
+                DeviceState state = TryGetState(device);
+                if (logEndpoints)
+                {
+                    _log.Write($"Endpoint '{name}' {ShortId(device.ID)}: {state}{(isBluetooth ? ", Bluetooth" : "")}");
+                }
+
+                bool connected = state == DeviceState.Active;
+                byName[name] = byName.TryGetValue(name, out var known)
+                    ? (known.Connected || connected, isBluetooth)
+                    : (connected, isBluetooth);
             }
+        }
+
+        KnownDevice[] devices =
+        [
+            .. byName
+                .Select(d => new KnownDevice(d.Key, d.Value.Connected, selection.IsGuarded(d.Key, d.Value.IsBluetooth)))
+                .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase),
+        ];
+
+        if (!devices.SequenceEqual(_devices))
+        {
+            _devices = devices;
+            StatusChanged?.Invoke();
+        }
+    }
+
+    /// <summary>Whether the endpoint belongs to a Bluetooth device. Cached per endpoint ID: it never changes.</summary>
+    private bool IsBluetooth(MMDevice device)
+    {
+        string id = device.ID;
+        if (_isBluetooth.TryGetValue(id, out bool cached))
+        {
+            return cached;
+        }
+
+        bool isBluetooth = BluetoothEndpoint.IsBluetooth(
+            TryGetString(device, s_enumeratorNameKey), TryGetString(device, s_associationKey));
+        _isBluetooth[id] = isBluetooth;
+        return isBluetooth;
+    }
+
+    // PKEY_Device_EnumeratorName: BTHENUM / BTHHFENUM for classic Bluetooth endpoints.
+    private static readonly PropertyKey s_enumeratorNameKey = new(new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), 24);
+
+    // Undocumented endpoint property holding the path of the associated device node; for Bluetooth
+    // audio routed through Intel Smart Sound Technology it is BTHENUM\{0000110B-...}\... (observed).
+    private static readonly PropertyKey s_associationKey = new(new Guid("b3f8fa53-0004-438e-9003-51a46e139bfc"), 39);
+
+    private static string? TryGetString(MMDevice device, PropertyKey key)
+    {
+        try
+        {
+            PropertyStore properties = device.Properties;
+            return properties.Contains(key) ? properties[key].Value as string : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static DeviceState TryGetState(MMDevice device)
+    {
+        try
+        {
+            return device.State;
+        }
+        catch (Exception)
+        {
+            return DeviceState.NotPresent;
         }
     }
 
@@ -213,31 +316,35 @@ public sealed class EndpointVolumeGuard : IDisposable
         // Raw Windows events are noisy: a Bluetooth disconnect walks every endpoint of the headset
         // (playback, microphone, stale entries from earlier pairings) through several states.
         // Normal level only gets the outcome from Synchronize: "watching" / "stopped watching".
-        (string Name, DataFlow Flow)? device = _watched.TryGetValue(deviceId, out WatchedEndpoint? watched)
-            ? (watched.Name, DataFlow.Render)
-            : TryDescribe(deviceId);
-
-        if (device is { } d && _mask.IsMatch(d.Name))
+        if (TryDescribe(deviceId) is { } d && _selection.IsCandidate(d.Name, d.IsBluetooth))
         {
             _log.Verbose($"[{d.Name}] {d.Flow.ToString().ToLowerInvariant()} {ShortId(deviceId)}: device {what}");
         }
 
+        RefreshDevices(logEndpoints: false);
         Synchronize(isStartup: false, fromSafetyPoll: false);
     }
 
     /// <summary>
-    /// Starts watching matching endpoints that became active, stops watching those that are gone,
-    /// and re-reads the volume of watched endpoints to catch missed notifications.
+    /// Starts watching guarded endpoints that became active, stops watching those that are gone or
+    /// no longer guarded, and re-reads the volume of watched endpoints to catch missed notifications.
     /// </summary>
+    /// <param name="isStartup">
+    /// True at startup and when the selection changes: endpoints found then are not "appearing",
+    /// so their volume is not corrected.
+    /// </param>
     private void Synchronize(bool isStartup, bool fromSafetyPoll)
     {
+        DeviceSelection selection = _selection;
         var active = new HashSet<string>();
+        var guarded = new HashSet<string>();
 
         foreach (MMDevice device in _enumerator!.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
         {
             string id = device.ID;
             string name = TryGetName(device);
-            if (!_mask.IsMatch(name) || !active.Add(id))
+            active.Add(id);
+            if (!selection.IsGuarded(name, IsBluetooth(device)) || !guarded.Add(id))
             {
                 device.Dispose();
                 continue;
@@ -260,12 +367,13 @@ public sealed class EndpointVolumeGuard : IDisposable
             }
         }
 
-        foreach (string id in _watched.Keys.Where(id => !active.Contains(id)).ToList())
+        foreach (string id in _watched.Keys.Where(id => !guarded.Contains(id)).ToList())
         {
             WatchedEndpoint gone = _watched[id];
             _watched.Remove(id);
             gone.Dispose();
-            _log.Write($"[{gone.Name}] {ShortId(id)}: disconnected, stopped watching");
+            string reason = active.Contains(id) ? "no longer guarded" : "disconnected";
+            _log.Write($"[{gone.Name}] {ShortId(id)}: {reason}, stopped watching");
         }
 
         PublishStatus();
@@ -283,12 +391,12 @@ public sealed class EndpointVolumeGuard : IDisposable
         StatusChanged?.Invoke();
     }
 
-    private (string Name, DataFlow Flow)? TryDescribe(string deviceId)
+    private (string Name, DataFlow Flow, bool IsBluetooth)? TryDescribe(string deviceId)
     {
         try
         {
             using MMDevice device = _enumerator!.GetDevice(deviceId);
-            return (TryGetName(device), device.DataFlow);
+            return (TryGetName(device), device.DataFlow, IsBluetooth(device));
         }
         catch (Exception)
         {
@@ -410,7 +518,7 @@ public sealed class EndpointVolumeGuard : IDisposable
                 return;
             }
 
-            VolumeChangeSource source = VolumeChangeContexts.Classify(context);
+            VolumeChangeSource source = _owner._contexts.Classify(context);
             Handle(source, scalar, muted, at, $"context {context} ({source})");
         }
 
