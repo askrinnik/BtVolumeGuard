@@ -1,15 +1,21 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
-    <img src="docs/banner-light.png" width="800" alt="BtVolumeGuard: a Windows tray app that stops Bluetooth headsets from jumping to 100% volume when a call starts">
-  </picture>
-</p>
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/icon-dark.png">
+  <img src="docs/icon-light.png" width="96" alt="">
+</picture>
+
+# BtVolumeGuard
+
+A Windows tray app that stops Bluetooth headsets from jumping to 100% volume when a call starts.
 
 [![CI](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/askrinnik/BtVolumeGuard)](https://github.com/askrinnik/BtVolumeGuard/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+</div>
 
 ## The problem
 
