@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/social-preview.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
     <img src="docs/banner-light.png" width="800" alt="BtVolumeGuard: a Windows tray app that stops Bluetooth headsets from jumping to 100% volume when a call starts">
   </picture>
 </p>
