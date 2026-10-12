@@ -12,9 +12,26 @@
 ## Facts about the headset
 
 - The LK12 headset is Bluetooth Classic only (profiles HSP, HFP, AVRCP, A2DP; codecs SBC/AAC). No LE Audio.
-- `Headset (LK12 Hands-Free)` is **not** listed among active render endpoints outside of a call; it appears when a call opens the headset microphone. `Headset (LK12)` is the HFP **capture** endpoint (the microphone), not a playback device.
-- Outside of a call, `Headset (LK12 Hands-Free)` is not enumerated as a render endpoint in **any** state (not even `NotPresent`), while `Headphones (LK12)` has one `Active` and several stale `NotPresent` entries with different IDs (observed 2026-10-12).
-- Changes made through `SetMasterVolumeLevelScalar` with `Guid.Empty` (as the prototype does) arrive with event context `Guid.Empty`.
+- **One playback endpoint for both profiles** (observed on a real Teams call, 2026-10-12). No `Headset (LK12 Hands-Free)` endpoint appeared, and no device was added or changed state during the call. A2DP ↔ HFP switching happens inside `Headphones (LK12)` (Windows 11 unified Bluetooth endpoint), so the endpoint ID stays the same. `Headphones (LK12)` also has stale `NotPresent` entries with other IDs. (An earlier observation of a separate `Hands-Free` render endpoint was not reproduced.)
+- **Windows keeps a separate volume per profile and remembers both.** At call start Windows switches the endpoint to the HFP volume left from the previous call; at call end it switches back to the A2DP volume from before the call.
+- **The jump is a second step, pushed by the headset.** About 0.5 s after the switch to HFP the headset reports maximum volume (HFP `AT+VGS`), and the driver sets 100%. Observed sequences (two runs, 2026-10-12):
+  - `27% → 88%` (profile switch; 88% was left from the previous call) → `100%` (driver, +0.6 s);
+  - `27% → 58%` (profile switch; 58% was set in the previous call) → `100%` (driver, +0.5 s);
+  - `25% → 100%` (profile switch; HFP volume was already 100%), no separate driver step visible.
+
+  So Windows already restores a sensible call volume; the headset overrides it on every call.
+- **Event contexts seen on `Headphones (LK12)`:**
+
+  | Context | Source | Notes |
+  |---|---|---|
+  | `03016827-7b05-566a-ada3-14d84347d041` | Profile switch A2DP ↔ HFP (call start and end) | Sets the volume remembered for the profile. Name-based (v5) GUID, probably a constant of the Windows Bluetooth audio stack; not yet checked across reconnects and reboots. |
+  | `0de6c1af-c506-4e60-bd8c-f3b00097de2a` | Bluetooth driver: volume reported by the headset | **The jump to 100%** after the switch to HFP; headset buttons outside a call (steps of 1/16: 6.25%, 12.5%, 18.7%…); a re-quantizing echo right after every Windows change in A2DP. |
+  | `00000000-0000-0000-0000-000000000000` | Keyboard volume keys; `SetMasterVolumeLevelScalar` with `Guid.Empty` | 2% steps, in A2DP and HFP. |
+  | `355c8163-187b-45d8-9882-61afb3537f61` | Volume slider in the taskbar flyout | 1% steps. Probably owned by the shell process; stability unknown. |
+
+- **Headset buttons during a call produce no notification at all**: pressed several times in a call, nothing was logged.
+- **The switch back to A2DP at call end can arrive late.** Once the safety poll saw `50% → 27%` before any notification; the profile-switch notification came 0.6 s later, already carrying 27%. Logic must not assume notification order matches the actual volume.
+- Otherwise notifications arrive within milliseconds.
 
 ## Design decisions
 
@@ -28,16 +45,24 @@
 
 `AudioVolumeNotificationData` carries an event-context GUID. If changes coming from the headset (HFP `AT+VGS` via the driver) carry a context different from changes made by the Windows volume slider or the keyboard, the guard can revert **only** headset-initiated changes. That would remove the main limitation of the prototype: a deliberate fast move to 100% by the user also gets reverted.
 
-First milestone must log the event context for every change, then verify on a real Teams call:
+**Answer (two real Teams sessions, 2026-10-12): yes.** User changes (keyboard `Guid.Empty`, flyout slider `355c8163-…`) never share a context with the jump. The jump comes from the driver (`0de6c1af-…`), right after a profile switch (`03016827-…`) to HFP. The driver context alone is not enough (headset buttons outside a call use it too), but the sequence is distinctive: *profile switch, then within about a second a driver change to maximum*.
 
-1. Change volume with the Windows slider → note the GUID.
-2. Change volume with the headset buttons → note the GUID.
-3. Start a Teams meeting (the jump) → note the GUID.
+Candidate rule for step 3:
+
+- After a profile switch, for a short window (~2 s): a driver-context change to ≥ max is reverted to the volume the profile switch set (Windows' remembered call volume, e.g. 58%).
+- A profile switch that itself lands at ≥ max (the remembered HFP volume is 100%) gets the remembered call volume or the default.
+- Changes with any other context are accepted and remembered, including deliberate moves to 100%.
+
+Still to check:
+
+- Are `03016827-…` and `0de6c1af-…` stable across headset reconnects and reboots? If not, recognise them by behaviour (first change after the device goes quiet, step patterns) rather than by value.
+
+Consequences for the requirements (to settle in step 3): requirement 1 (two endpoints) and requirement 3 (endpoint appearing) do not apply to this machine; the jump is a volume change on the already-watched endpoint.
 
 ## Roadmap
 
 1. **Core Audio layer:** enumerate matching endpoints, subscribe to volume and device notifications, log changes with event context. Diagnostic log only, no reverting yet. *Done* (`EndpointVolumeMonitor`); verified with a simulated change on a Realtek endpoint, not yet on a call.
-2. **Verify on a real Teams call** and resolve the open question above.
+2. **Verify on a real Teams call** and resolve the open question above. *Done* 2026-10-12: the jump has its own event context (see above); a few follow-up checks remain.
 3. **Guard:** wire `VolumeJumpPolicy` into the event flow, revert jumps, remember volumes.
 4. **Settings and state** next to the executable (JSON): device mask, thresholds, default volume, remembered volumes per endpoint ID. Log file in the same folder.
 5. **Tray menu:** enable/disable guard, current headset volume, default volume, open log, "Start with Windows" (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`), Exit. Optional balloon notification on revert. Proper icon.
