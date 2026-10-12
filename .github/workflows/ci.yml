@@ -1,0 +1,67 @@
+# Build, test, format check and publish on every push and pull request.
+# A tag v<major>.<minor>.<patch> also creates a GitHub Release with BtVolumeGuard.exe.
+# Core Audio and the headset cannot be tested here; see CLAUDE.md, "Testing on the real device".
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: dotnet build src -c Release
+
+      - name: Test
+        run: dotnet test src -c Release --no-build
+
+      - name: Check formatting
+        run: dotnet format src --verify-no-changes
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '' }
+          ./tools/publish.ps1 -Version $version
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: BtVolumeGuard
+          path: publish/BtVolumeGuard.exe
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: BtVolumeGuard
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" BtVolumeGuard.exe \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "BtVolumeGuard $GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "Single-file BtVolumeGuard.exe for Windows 10/11 x64. Requires the .NET 10 Desktop Runtime. Put it in a folder you can write to (settings and log are kept next to it)."

@@ -30,7 +30,8 @@ Before running the tray app, make sure no earlier instance is running (single-in
   - `Settings/VolumeMemory`: `BtVolumeGuard.state.json`, last volume below maximum per endpoint ID.
 - `src/BtVolumeGuard`: WinExe tray shell: `Program`, `TrayApplicationContext` (menu, tooltip, notifications), `TrayIconRenderer` (icon drawn at runtime), `StartupRegistration` (HKCU Run value, changed only from the menu). `--mask "<pattern>"` overrides the device mask from the settings file (default `*LK12*`).
 - `src/BtVolumeGuard.Core.Tests`: xUnit tests.
-- `tools/`: `publish.ps1` (framework-dependent single-file win-x64; with `-InstallDir` copies the exe, stopping and restarting a running copy), `make-icon.ps1` (draws the exe icon with `TrayIconRenderer`, style `DarkWithHalo`).
+- `.github/workflows/ci.yml`: on push/PR to `main` (windows-latest): build, test, format check, `publish.ps1`, exe as artifact. A tag `v<version>` also creates a GitHub Release with the exe (version taken from the tag). It cannot test Core Audio.
+- `tools/`: `publish.ps1` (framework-dependent single-file win-x64; `-Version` overrides the project version; with `-InstallDir` copies the exe, stopping and restarting a running copy), `make-icon.ps1` (draws the exe icon with `TrayIconRenderer`, style `DarkWithHalo`).
 - `prototype/LK12-VolumeGuard.ps1`: working PowerShell prototype (polling, own Core Audio interop). Reference for behavior; not built or shipped.
 
 ## Conventions

@@ -69,6 +69,8 @@ The app is a single `BtVolumeGuard.exe` (framework-dependent, needs the [.NET 10
 .\tools\publish.ps1 -InstallDir D:\Tools\BtVolumeGuard  # also copies it there (stops and restarts a running copy)
 ```
 
+Ready-made builds: every CI run attaches `BtVolumeGuard.exe` as an artifact, and pushing a tag `v<version>` (e.g. `v0.1.1`) creates a [GitHub Release](https://github.com/askrinnik/BtVolumeGuard/releases) with the exe built for that version.
+
 Start the installed exe once and use the tray menu → "Start with Windows" to run it at logon. Updating is the same `-InstallDir` command; settings and the log are kept.
 
 ## Repository layout
@@ -78,6 +80,7 @@ src/                           Self-contained C# solution: BtVolumeGuard.slnx, D
 src/BtVolumeGuard.Core/        Logic and Core Audio access (NAudio), no UI
 src/BtVolumeGuard/             WinForms tray app (WinExe)
 src/BtVolumeGuard.Core.Tests/  xUnit tests for Core
+.github/workflows/ci.yml       CI: build, tests, format check, publish; release on tag v*
 tools/publish.ps1              Release build and install into a folder
 tools/make-icon.ps1            Regenerates the executable's icon
 prototype/                     PowerShell prototype

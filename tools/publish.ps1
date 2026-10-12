@@ -16,19 +16,24 @@
 
 .EXAMPLE
     .\tools\publish.ps1 -InstallDir D:\Tools\BtVolumeGuard
+
+.EXAMPLE
+    .\tools\publish.ps1 -Version 0.2.0    # overrides <Version> from the project (used by CI for tags)
 #>
 [CmdletBinding()]
 param(
-    [string]$InstallDir
+    [string]$InstallDir,
+    [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $publishDir = Join-Path $root 'publish'
 
+[string[]]$versionArgs = if ($Version) { "-p:Version=$Version" } else { @() }
 dotnet publish (Join-Path $root 'src\BtVolumeGuard') `
     -c Release -r win-x64 --self-contained false `
-    -p:PublishSingleFile=true -p:DebugType=embedded `
+    -p:PublishSingleFile=true -p:DebugType=embedded @versionArgs `
     -o $publishDir --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
 
