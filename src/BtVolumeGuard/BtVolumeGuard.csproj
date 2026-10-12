@@ -14,6 +14,8 @@
     <ApplicationIcon>BtVolumeGuard.ico</ApplicationIcon>
     <Version>0.1.0</Version>
     <Product>BtVolumeGuard</Product>
+    <Authors>Alexander Skrinnik</Authors>
+    <Copyright>Copyright (c) 2026 Alexander Skrinnik. MIT License.</Copyright>
     <Description>Reverts Bluetooth headset volume jumps to 100% at the start of a call.</Description>
   </PropertyGroup>
 

@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/askrinnik/BtVolumeGuard)](https://github.com/askrinnik/BtVolumeGuard/releases/latest)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4)
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 A Windows tray app that stops Bluetooth headsets from jumping to 100% volume when a call starts.
 
@@ -89,3 +92,7 @@ tools/make-icon.ps1            Regenerates the executable's icon
 prototype/                     PowerShell prototype
 docs/design.md                 Requirements, design decisions, roadmap
 ```
+
+## License
+
+[MIT](LICENSE)
