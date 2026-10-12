@@ -1,0 +1,99 @@
+using BtVolumeGuard.Core.Settings;
+
+namespace BtVolumeGuard.Core.Tests;
+
+public sealed class SettingsTests : IDisposable
+{
+    private readonly string _dir = Directory.CreateTempSubdirectory("BtVolumeGuardTests").FullName;
+
+    public void Dispose() => Directory.Delete(_dir, recursive: true);
+
+    private string PathOf(string name) => Path.Combine(_dir, name);
+
+    [Fact]
+    public void Missing_settings_file_is_created_with_defaults()
+    {
+        string path = PathOf(AppSettings.FileName);
+
+        (AppSettings settings, string? problem) = AppSettings.Load(path);
+
+        Assert.Null(problem);
+        Assert.Equal(new AppSettings(), settings);
+        Assert.True(File.Exists(path));
+        Assert.Equal(new AppSettings(), AppSettings.Load(path).Settings);
+    }
+
+    [Fact]
+    public void Settings_are_read_with_comments_and_missing_properties_defaulted()
+    {
+        string path = PathOf(AppSettings.FileName);
+        File.WriteAllText(path, """
+            {
+              // headset of a colleague
+              "DeviceMask": "*WH-1000*",
+              "DefaultVolume": 30,
+            }
+            """);
+
+        (AppSettings settings, string? problem) = AppSettings.Load(path);
+
+        Assert.Null(problem);
+        Assert.Equal("*WH-1000*", settings.DeviceMask);
+        Assert.Equal(30, settings.DefaultVolume);
+        Assert.Equal(95, settings.MaxThreshold);
+        Assert.Equal(TimeSpan.FromSeconds(2), settings.ToPolicy().ProfileSwitchWindow);
+    }
+
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("""{ "DefaultVolume": 99 }""")]
+    [InlineData("""{ "DeviceMask": "" }""")]
+    public void Invalid_settings_file_gives_defaults_and_a_problem_and_is_kept(string content)
+    {
+        string path = PathOf(AppSettings.FileName);
+        File.WriteAllText(path, content);
+
+        (AppSettings settings, string? problem) = AppSettings.Load(path);
+
+        Assert.Equal(new AppSettings(), settings);
+        Assert.NotNull(problem);
+        Assert.Equal(content, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void Remembered_volumes_survive_reload()
+    {
+        string path = PathOf(VolumeMemory.FileName);
+        VolumeMemory memory = VolumeMemory.Load(path).Memory;
+
+        Assert.Null(memory.Set("{endpoint-a}", 35));
+        Assert.Null(memory.Set("{endpoint-b}", 20));
+
+        VolumeMemory reloaded = VolumeMemory.Load(path).Memory;
+        Assert.Equal(35, reloaded.Get("{endpoint-a}"));
+        Assert.Equal(20, reloaded.Get("{endpoint-b}"));
+        Assert.Null(reloaded.Get("{endpoint-c}"));
+    }
+
+    [Fact]
+    public void Missing_state_file_means_nothing_remembered()
+    {
+        (VolumeMemory memory, string? problem) = VolumeMemory.Load(PathOf(VolumeMemory.FileName));
+
+        Assert.Null(problem);
+        Assert.Null(memory.Get("{endpoint-a}"));
+    }
+
+    [Fact]
+    public void Corrupt_state_file_is_reported_and_replaced_on_next_save()
+    {
+        string path = PathOf(VolumeMemory.FileName);
+        File.WriteAllText(path, "garbage");
+
+        (VolumeMemory memory, string? problem) = VolumeMemory.Load(path);
+        Assert.NotNull(problem);
+
+        memory.Set("{endpoint-a}", 40);
+        Assert.Equal(40, VolumeMemory.Load(path).Memory.Get("{endpoint-a}"));
+    }
+}

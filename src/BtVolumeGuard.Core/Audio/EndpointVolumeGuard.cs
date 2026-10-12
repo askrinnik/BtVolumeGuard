@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 
 using BtVolumeGuard.Core.Logging;
+using BtVolumeGuard.Core.Settings;
 
 using NAudio.CoreAudioApi;
 
@@ -16,8 +17,8 @@ namespace BtVolumeGuard.Core.Audio;
 /// All Core Audio objects are created and used on one dedicated worker thread. Notification
 /// callbacks arrive on Windows audio threads; they only capture their data and enqueue work.
 /// The worker also re-enumerates endpoints and re-reads volumes periodically, in case a
-/// notification is missed. Volumes remembered for endpoints that went away are kept in memory
-/// only (until roadmap step 4).
+/// notification is missed. The last volume below maximum per endpoint is kept in a
+/// <see cref="VolumeMemory"/>, which survives restarts.
 /// </remarks>
 public sealed class EndpointVolumeGuard : IDisposable
 {
@@ -29,16 +30,18 @@ public sealed class EndpointVolumeGuard : IDisposable
     private readonly TimeProvider _time;
     private readonly BlockingCollection<Action> _queue = [];
     private readonly Dictionary<string, WatchedEndpoint> _watched = [];
-    private readonly Dictionary<string, int> _remembered = [];
+    private readonly VolumeMemory _memory;
     private readonly Thread _worker;
 
     private MMDeviceEnumerator? _enumerator;
     private MMDeviceNotificationClient? _deviceNotifications;
 
-    public EndpointVolumeGuard(DeviceNameMask mask, VolumeJumpPolicy policy, ILog log, TimeProvider? time = null)
+    public EndpointVolumeGuard(
+        DeviceNameMask mask, VolumeJumpPolicy policy, VolumeMemory memory, ILog log, TimeProvider? time = null)
     {
         _mask = mask;
         _policy = policy;
+        _memory = memory;
         _log = log;
         _time = time ?? TimeProvider.System;
         _worker = new Thread(Run) { IsBackground = true, Name = "BtVolumeGuard audio" };
@@ -216,7 +219,7 @@ public sealed class EndpointVolumeGuard : IDisposable
 
             if (!isStartup)
             {
-                endpoint.OnAppeared(_remembered.TryGetValue(id, out int remembered) ? remembered : null);
+                endpoint.OnAppeared(_memory.Get(id));
             }
         }
 
@@ -394,7 +397,10 @@ public sealed class EndpointVolumeGuard : IDisposable
         {
             if (_guard.Remembered is { } remembered)
             {
-                _owner._remembered[Id] = remembered;
+                if (_owner._memory.Set(Id, remembered) is { } problem)
+                {
+                    _owner._log.Write(problem);
+                }
             }
         }
     }

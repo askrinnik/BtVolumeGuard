@@ -1,12 +1,11 @@
-using BtVolumeGuard.Core;
-
 namespace BtVolumeGuard;
 
 internal static class Program
 {
-    private const string DefaultMask = "*LK12*";
-
-    /// <param name="args">Optional: <c>--mask "&lt;pattern&gt;"</c> to watch other endpoints (e.g. for testing).</param>
+    /// <param name="args">
+    /// Optional: <c>--mask "&lt;pattern&gt;"</c> overrides the device mask from the settings file
+    /// (e.g. for testing on another endpoint).
+    /// </param>
     [STAThread]
     private static void Main(string[] args)
     {
@@ -17,12 +16,12 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApplicationContext(new DeviceNameMask(ParseMask(args))));
+        Application.Run(new TrayApplicationContext(ParseMask(args)));
     }
 
-    private static string ParseMask(string[] args)
+    private static string? ParseMask(string[] args)
     {
         int index = Array.FindIndex(args, a => a.Equals("--mask", StringComparison.OrdinalIgnoreCase));
-        return index >= 0 && index + 1 < args.Length ? args[index + 1] : DefaultMask;
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
     }
 }

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using BtVolumeGuard.Core;
 using BtVolumeGuard.Core.Audio;
 using BtVolumeGuard.Core.Logging;
+using BtVolumeGuard.Core.Settings;
 
 namespace BtVolumeGuard;
 
@@ -16,10 +17,25 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly FileLog _log;
     private readonly EndpointVolumeGuard _guard;
 
-    public TrayApplicationContext(DeviceNameMask mask)
+    /// <param name="maskOverride">Device mask from the command line; overrides the settings file.</param>
+    public TrayApplicationContext(string? maskOverride)
     {
         _log = new FileLog(FileLog.DefaultPath);
-        _guard = new EndpointVolumeGuard(mask, new VolumeJumpPolicy(), _log);
+
+        (AppSettings settings, string? settingsProblem) = AppSettings.Load(AppSettings.DefaultPath);
+        if (settingsProblem is not null)
+        {
+            _log.Write(settingsProblem);
+        }
+
+        (VolumeMemory memory, string? memoryProblem) = VolumeMemory.Load(VolumeMemory.DefaultPath);
+        if (memoryProblem is not null)
+        {
+            _log.Write(memoryProblem);
+        }
+
+        var mask = new DeviceNameMask(string.IsNullOrWhiteSpace(maskOverride) ? settings.DeviceMask : maskOverride);
+        _guard = new EndpointVolumeGuard(mask, settings.ToPolicy(), memory, _log);
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open log", null, (_, _) => OpenLog());

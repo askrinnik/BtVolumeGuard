@@ -40,7 +40,7 @@ A working PowerShell prototype of the same idea is in [`prototype/LK12-VolumeGua
 
 ## Status
 
-Early development. The guard (roadmap step 3) is implemented: the tray app reverts the jump and logs every volume change, its event context and the decision to `BtVolumeGuard.log` next to the executable (tray menu → Open log). Verified on real Teams calls. Settings, persistence and the full tray menu are next; see [`docs/design.md`](docs/design.md).
+Early development. The guard (roadmap step 3) is implemented: the tray app reverts the jump and logs every volume change, its event context and the decision to `BtVolumeGuard.log` next to the executable (tray menu → Open log). Verified on real Teams calls. Settings and remembered volumes are stored as JSON next to the executable (`BtVolumeGuard.settings.json`, `BtVolumeGuard.state.json`). The full tray menu and an icon are next; see [`docs/design.md`](docs/design.md).
 
 ## Build and run
 
