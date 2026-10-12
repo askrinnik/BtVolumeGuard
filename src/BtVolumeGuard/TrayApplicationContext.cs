@@ -5,6 +5,8 @@ using BtVolumeGuard.Core.Audio;
 using BtVolumeGuard.Core.Logging;
 using BtVolumeGuard.Core.Settings;
 
+using Microsoft.Win32;
+
 namespace BtVolumeGuard;
 
 /// <summary>
@@ -44,21 +46,40 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
             Text = $"BtVolumeGuard: {mask}",
             ContextMenuStrip = menu,
-            Visible = true,
         };
+        UpdateIcon();
+        _trayIcon.Visible = true;
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
         _guard.Start();
     }
 
     protected override void ExitThreadCore()
     {
+        SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _guard.Dispose();
         _trayIcon.Visible = false;
+        _trayIcon.Icon?.Dispose();
         _trayIcon.Dispose();
         base.ExitThreadCore();
+    }
+
+    // Taskbar theme or DPI may have changed: redraw the icon to match.
+    private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.Icon)
+        {
+            UpdateIcon();
+        }
+    }
+
+    private void UpdateIcon()
+    {
+        Icon? previous = _trayIcon.Icon;
+        _trayIcon.Icon = TrayIconRenderer.Create(SystemInformation.SmallIconSize.Width, TrayIconRenderer.IsTaskbarLight());
+        previous?.Dispose();
     }
 
     private void OpenLog()
