@@ -39,7 +39,7 @@ A working PowerShell prototype of the same idea is in [`prototype/LK12-VolumeGua
 
 ## Status
 
-Early development. Roadmap step 1 is done: the tray app watches matching endpoints and logs every volume change with its event context to `%LOCALAPPDATA%\BtVolumeGuard\BtVolumeGuard.log` (tray menu → Open log). It does not revert anything yet. Next steps are in [`docs/design.md`](docs/design.md).
+Early development. Roadmap step 1 is done: the tray app watches matching endpoints and logs every volume change with its event context to `BtVolumeGuard.log` next to the executable (tray menu → Open log). It does not revert anything yet. Next steps are in [`docs/design.md`](docs/design.md).
 
 ## Build and run
 

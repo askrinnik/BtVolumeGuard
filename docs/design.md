@@ -39,7 +39,7 @@ First milestone must log the event context for every change, then verify on a re
 1. **Core Audio layer:** enumerate matching endpoints, subscribe to volume and device notifications, log changes with event context. Diagnostic log only, no reverting yet. *Done* (`EndpointVolumeMonitor`); verified with a simulated change on a Realtek endpoint, not yet on a call.
 2. **Verify on a real Teams call** and resolve the open question above.
 3. **Guard:** wire `VolumeJumpPolicy` into the event flow, revert jumps, remember volumes.
-4. **Settings and state** in `%LOCALAPPDATA%\BtVolumeGuard\` (JSON): device mask, thresholds, default volume, remembered volumes per endpoint ID. Log file in the same folder.
+4. **Settings and state** next to the executable (JSON): device mask, thresholds, default volume, remembered volumes per endpoint ID. Log file in the same folder.
 5. **Tray menu:** enable/disable guard, current headset volume, default volume, open log, "Start with Windows" (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`), Exit. Optional balloon notification on revert. Proper icon.
-6. **Publish:** framework-dependent `win-x64`, install to `%LOCALAPPDATA%\Programs\BtVolumeGuard\`.
+6. **Publish:** framework-dependent `win-x64`, copied to any user-writable folder (not `Program Files`, not `%LOCALAPPDATA%`). Settings, state and log stay next to the executable, so the folder must be writable.
 7. Retire the PowerShell prototype once the app is verified.

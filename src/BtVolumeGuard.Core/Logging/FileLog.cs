@@ -17,11 +17,11 @@ public sealed class FileLog : ILog
 
     public string Path { get; }
 
-    /// <summary>Default log location: %LOCALAPPDATA%\BtVolumeGuard\BtVolumeGuard.log.</summary>
-    public static string DefaultPath { get; } = System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BtVolumeGuard",
-        "BtVolumeGuard.log");
+    /// <summary>
+    /// Default log location: BtVolumeGuard.log next to the executable. The app is meant to run
+    /// from a user-writable folder (not Program Files), so the log lives with it.
+    /// </summary>
+    public static string DefaultPath { get; } = System.IO.Path.Combine(AppContext.BaseDirectory, "BtVolumeGuard.log");
 
     public void Write(string message)
     {
