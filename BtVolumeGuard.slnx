@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BtVolumeGuard.Core/BtVolumeGuard.Core.csproj" />
+    <Project Path="src/BtVolumeGuard/BtVolumeGuard.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BtVolumeGuard.Core.Tests/BtVolumeGuard.Core.Tests.csproj" />
+  </Folder>
+</Solution>
