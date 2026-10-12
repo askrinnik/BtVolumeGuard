@@ -22,7 +22,7 @@ Before running the tray app, make sure no earlier instance is running (single-in
   - `EndpointGuard`: per-endpoint guard state; decides accept / revert / ignore for each change (pure, time passed in).
   - `VolumeChangeContexts`: maps observed event-context GUIDs to `VolumeChangeSource`; holds the app's own GUID.
   - `DeviceNameMask`, `VolumeLevel`: pure helpers (wildcard name match, scalar ↔ percent).
-  - `Audio/EndpointVolumeGuard`: owns all NAudio objects on one worker thread; feeds changes to `EndpointGuard`, sets volume with the own context, logs every change and decision.
+  - `Audio/EndpointVolumeGuard`: owns all NAudio objects on one worker thread; feeds changes to `EndpointGuard`, sets volume with the own context, logs reverted jumps (every change at `Verbose`).
   - `Logging/FileLog`: timestamped log, `BtVolumeGuard.log` next to the executable. Levels `Off`, `Normal` (start/stop, endpoints, reverted jumps, errors), `Verbose` (also every volume change with its event context); `LogLevel` in the settings, switchable from the tray menu.
   - `Settings/AppSettings`: `BtVolumeGuard.settings.json` next to the executable (created with defaults if missing; invalid file → defaults + log line).
   - `Settings/VolumeMemory`: `BtVolumeGuard.state.json`, last volume below maximum per endpoint ID.
@@ -42,7 +42,7 @@ Before running the tray app, make sure no earlier instance is running (single-in
 
 Unit tests cannot cover Core Audio or the headset. Behavior that depends on them must be checked on the machine:
 
-- `Headset (LK12 Hands-Free)` exists only during a call; to test, start a Teams meeting (or any app that opens the headset microphone) with the LK12 connected. Only the user can do this; ask them, and say exactly what to look for in the log.
+- The jump happens only on a call: the headset switches to HFP inside `Headphones (LK12)` (no separate Hands-Free endpoint on this machine). To test, start a Teams meeting (or any app that opens the headset microphone) with the LK12 connected. Only the user can do this; ask them, and say exactly what to look for in the log.
 - To test reverting without a call, point the device mask at another endpoint (e.g. `*Realtek*`) and change its volume programmatically. Restore the original volume afterwards.
 - To read event-context GUIDs from a real call, ask the user to set the log level to `Verbose` (tray menu → Log level) first; at `Normal` volume changes are not logged.
 - Report what was verified on a real call and what was only simulated.
