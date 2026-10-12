@@ -29,17 +29,18 @@ The jump is initiated by the headset itself, so Windows settings cannot prevent 
 
 BtVolumeGuard runs in the system tray and watches the volume of the selected Bluetooth playback devices (name mask, `*LK12*` by default):
 
-- If the volume jumps to the maximum in one step (≥ 95%, by at least 20 points), the previous volume is restored.
-- When the `Hands-Free` device appears at the start of a call already at 100%, the volume from the previous call is applied (or a default of 20% if none is known).
-- The volume set by the user is remembered between calls and across restarts.
+- At the start of a call Windows switches the headset to the call profile and sets the call volume it remembered; about half a second later the headset pushes 100%. BtVolumeGuard recognises that push by its Core Audio event context and restores the volume Windows had set.
+- Any other single-step jump to the maximum (≥ 95%, by at least 20 points) from an unrecognised source is reverted too.
+- Changes made by the user (keyboard, volume sliders, headset buttons) are never reverted, even a deliberate move to 100%.
+- If a separate `Hands-Free` device appears already at 100% (seen on other setups), the last known volume or a default of 20% is applied.
 
-It reacts to Windows Core Audio notifications (via [NAudio](https://github.com/naudio/NAudio)) rather than polling, so the correction should be fast enough to go unnoticed.
+It reacts to Windows Core Audio notifications (via [NAudio](https://github.com/naudio/NAudio)) rather than polling, so the correction should be fast enough to go unnoticed. How the jump was analysed: [`docs/design.md`](docs/design.md).
 
 A working PowerShell prototype of the same idea is in [`prototype/LK12-VolumeGuard.ps1`](prototype/LK12-VolumeGuard.ps1) (polling every 100 ms, verified by simulating a jump; not yet verified on a real call).
 
 ## Status
 
-Early development. Roadmap step 1 is done: the tray app watches matching endpoints and logs every volume change with its event context to `BtVolumeGuard.log` next to the executable (tray menu → Open log). It does not revert anything yet. Next steps are in [`docs/design.md`](docs/design.md).
+Early development. The guard (roadmap step 3) is implemented: the tray app reverts the jump and logs every volume change, its event context and the decision to `BtVolumeGuard.log` next to the executable (tray menu → Open log). Verified on real Teams calls. Settings, persistence and the full tray menu are next; see [`docs/design.md`](docs/design.md).
 
 ## Build and run
 

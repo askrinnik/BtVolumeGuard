@@ -7,19 +7,19 @@ using BtVolumeGuard.Core.Logging;
 namespace BtVolumeGuard;
 
 /// <summary>
-/// Tray-only application shell (no main window). Runs the endpoint monitor in diagnostic mode:
-/// volume changes are logged, not reverted yet (see docs/design.md, roadmap step 1).
+/// Tray-only application shell (no main window). Runs the volume guard, which reverts
+/// headset-induced jumps to maximum and logs every change (see docs/design.md).
 /// </summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon _trayIcon;
     private readonly FileLog _log;
-    private readonly EndpointVolumeMonitor _monitor;
+    private readonly EndpointVolumeGuard _guard;
 
     public TrayApplicationContext(DeviceNameMask mask)
     {
         _log = new FileLog(FileLog.DefaultPath);
-        _monitor = new EndpointVolumeMonitor(mask, _log);
+        _guard = new EndpointVolumeGuard(mask, new VolumeJumpPolicy(), _log);
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open log", null, (_, _) => OpenLog());
@@ -29,17 +29,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _trayIcon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
-            Text = $"BtVolumeGuard (diagnostic): {mask}",
+            Text = $"BtVolumeGuard: {mask}",
             ContextMenuStrip = menu,
             Visible = true,
         };
 
-        _monitor.Start();
+        _guard.Start();
     }
 
     protected override void ExitThreadCore()
     {
-        _monitor.Dispose();
+        _guard.Dispose();
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
         base.ExitThreadCore();

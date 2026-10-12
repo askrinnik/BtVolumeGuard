@@ -18,9 +18,11 @@ Before running the tray app, make sure no earlier instance is running (single-in
 `src/` is a self-contained C# solution: `BtVolumeGuard.slnx` (flat, no solution folders), `Directory.Build.props`, `.editorconfig` and all projects, including tests.
 
 - `src/BtVolumeGuard.Core`: logic and Core Audio access (NAudio.Wasapi). No UI.
-  - `VolumeJumpPolicy`: pure decision logic (jump detection, volume on endpoint appearance).
+  - `VolumeJumpPolicy`: thresholds and stateless jump rules.
+  - `EndpointGuard`: per-endpoint guard state; decides accept / revert / ignore for each change (pure, time passed in).
+  - `VolumeChangeContexts`: maps observed event-context GUIDs to `VolumeChangeSource`; holds the app's own GUID.
   - `DeviceNameMask`, `VolumeLevel`: pure helpers (wildcard name match, scalar ↔ percent).
-  - `Audio/EndpointVolumeMonitor`: owns all NAudio objects on one worker thread; logs endpoint and volume changes with event context. Diagnostic only so far.
+  - `Audio/EndpointVolumeGuard`: owns all NAudio objects on one worker thread; feeds changes to `EndpointGuard`, sets volume with the own context, logs every change and decision.
   - `Logging/FileLog`: timestamped log, `BtVolumeGuard.log` next to the executable.
 - `src/BtVolumeGuard`: WinExe tray shell (`Program`, `TrayApplicationContext`). `--mask "<pattern>"` overrides the device mask (default `*LK12*`).
 - `src/BtVolumeGuard.Core.Tests`: xUnit tests.

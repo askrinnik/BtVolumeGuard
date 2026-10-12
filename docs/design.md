@@ -2,9 +2,9 @@
 
 ## Requirements
 
-1. Guard playback endpoints whose name matches a configurable mask (default `*LK12*`). Both endpoints of the headset are guarded: `Headphones (LK12)` (A2DP) and `Headset (LK12 Hands-Free)` (HFP).
-2. Revert a single-step jump to maximum (`VolumeJumpPolicy.OnVolumeChanged`).
-3. When an endpoint becomes active already at maximum, set the remembered volume, or the default if none is known (`VolumeJumpPolicy.OnEndpointAppeared`).
+1. Guard playback endpoints whose name matches a configurable mask (default `*LK12*`). On Windows 11 the headset has one endpoint for both profiles (`Headphones (LK12)`); a separate `Headset (LK12 Hands-Free)` endpoint, if it exists on a setup, is guarded the same way.
+2. Revert the headset's push to maximum right after a profile switch, and any single-step jump to maximum from an unrecognised source. Never revert user changes (`EndpointGuard.OnChange`; rules in "Guard rules" below).
+3. When an endpoint appears (after startup) already at maximum, set the remembered volume, or the default if none is known (`EndpointGuard.OnAppeared`).
 4. Remember the user's volume per endpoint (keyed by endpoint ID) and persist it across restarts.
 5. Tray-only UI, no main window. No admin rights. Single instance per user session.
 6. Log every correction with timestamps.
@@ -39,7 +39,7 @@
 - **Event-driven, with a safety poll.** React to notifications for low latency; additionally poll every 1–2 s in case a notification is missed.
 - **Do not set volume inside the notification callback.** Core Audio callbacks must not block; marshal the work to a dedicated worker thread or the UI thread.
 - **Ignore our own changes.** Every `SetMasterVolumeLevelScalar` passes the app's own event-context GUID; notifications carrying that GUID are skipped.
-- **Pure logic in Core.** `VolumeJumpPolicy` has no Windows API dependencies and is covered by unit tests. Keep it that way for any new decision logic.
+- **Pure logic in Core.** `VolumeJumpPolicy` and `EndpointGuard` have no Windows API dependencies and is covered by unit tests. Keep it that way for any new decision logic.
 
 ## Open question: who changed the volume?
 
@@ -47,23 +47,34 @@
 
 **Answer (two real Teams sessions, 2026-10-12): yes.** User changes (keyboard `Guid.Empty`, flyout slider `355c8163-…`) never share a context with the jump. The jump comes from the driver (`0de6c1af-…`), right after a profile switch (`03016827-…`) to HFP. The driver context alone is not enough (headset buttons outside a call use it too), but the sequence is distinctive: *profile switch, then within about a second a driver change to maximum*.
 
-Candidate rule for step 3:
-
-- After a profile switch, for a short window (~2 s): a driver-context change to ≥ max is reverted to the volume the profile switch set (Windows' remembered call volume, e.g. 58%).
-- A profile switch that itself lands at ≥ max (the remembered HFP volume is 100%) gets the remembered call volume or the default.
-- Changes with any other context are accepted and remembered, including deliberate moves to 100%.
-
 Still to check:
 
-- Are `03016827-…` and `0de6c1af-…` stable across headset reconnects and reboots? If not, recognise them by behaviour (first change after the device goes quiet, step patterns) rather than by value.
+- Are `03016827-…` and `0de6c1af-…` stable across headset reconnects and reboots? If not, the fallback rule below (single-step jump from an unknown source) still catches large jumps, but not a small one such as 88% → 100%.
 
-Consequences for the requirements (to settle in step 3): requirement 1 (two endpoints) and requirement 3 (endpoint appearing) do not apply to this machine; the jump is a volume change on the already-watched endpoint.
+## Guard rules
+
+Implemented in `EndpointGuard` (pure, unit-tested); `VolumeChangeContexts` maps contexts to sources. "Jump" means: new volume ≥ max (95%), previous below max.
+
+| Source | Rule |
+|---|---|
+| `User` (`Guid.Empty`, taskbar slider) | Always accepted, including moves to 100%. |
+| `ProfileSwitch` | Accepted, unless it is a single-step jump of ≥ 20 points (the remembered call volume is 100%): then reverted to the previous volume. Starts the profile switch window. |
+| `HeadsetDriver` within 2 s after a profile switch | Any jump is reverted to the volume before it (the call volume Windows just set). |
+| `HeadsetDriver` otherwise (headset buttons) | Accepted, unless it is a single-step jump of ≥ 20 points (buttons move in 1/16 steps). |
+| `Unknown` context, or a change found by polling | Prototype rule: a single-step jump of ≥ 20 points is reverted. |
+| `Own` | Ignored; only updates the known volume. |
+
+Once the guard sets the call volume during a call, Windows remembers it for the next call, so later calls start from it.
+
+Known limitation: if the user's *music* volume is at maximum and the call volume is below it, the profile switch at the end of a call is a jump of ≥ 20 points and is reverted to the call volume. The guard cannot tell the switch direction yet.
+
+The safety poll reports a volume that differs from the last notification only when it sees it twice in a row: a late notification carries the context the rules need.
 
 ## Roadmap
 
-1. **Core Audio layer:** enumerate matching endpoints, subscribe to volume and device notifications, log changes with event context. Diagnostic log only, no reverting yet. *Done* (`EndpointVolumeMonitor`); verified with a simulated change on a Realtek endpoint, not yet on a call.
+1. **Core Audio layer:** enumerate matching endpoints, subscribe to volume and device notifications, log changes with event context. Diagnostic log only, no reverting yet. *Done.*
 2. **Verify on a real Teams call** and resolve the open question above. *Done* 2026-10-12: the jump has its own event context (see above); a few follow-up checks remain.
-3. **Guard:** wire `VolumeJumpPolicy` into the event flow, revert jumps, remember volumes.
+3. **Guard:** wire the decision logic into the event flow, revert jumps, remember volumes. *Done* (`EndpointGuard`, `Audio/EndpointVolumeGuard`); remembered volumes are in memory only. Verified on two real Teams calls (2026-10-12): the push to 100% came 500 and 639 ms after the profile switch and was reverted to the call volume (50%, then 68% set in the previous call) within about 50 ms; user changes during and after the calls were left alone. Contexts were the same as in the earlier sessions (same boot).
 4. **Settings and state** next to the executable (JSON): device mask, thresholds, default volume, remembered volumes per endpoint ID. Log file in the same folder.
 5. **Tray menu:** enable/disable guard, current headset volume, default volume, open log, "Start with Windows" (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`), Exit. Optional balloon notification on revert. Proper icon.
 6. **Publish:** framework-dependent `win-x64`, copied to any user-writable folder (not `Program Files`, not `%LOCALAPPDATA%`). Settings, state and log stay next to the executable, so the folder must be writable.

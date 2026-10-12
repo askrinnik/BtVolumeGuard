@@ -8,33 +8,39 @@ using NAudio.CoreAudioApi;
 namespace BtVolumeGuard.Core.Audio;
 
 /// <summary>
-/// Watches playback endpoints whose name matches a mask and logs every volume change together
-/// with its event-context GUID, plus endpoint arrival, removal and state changes.
-/// Diagnostic only (roadmap step 1): it never changes the volume.
+/// Watches playback endpoints whose name matches a mask and reverts headset-induced jumps to
+/// maximum volume (decisions by <see cref="EndpointGuard"/>). Logs endpoint arrival, removal,
+/// state changes and every volume change with its event context and the decision taken.
 /// </summary>
 /// <remarks>
 /// All Core Audio objects are created and used on one dedicated worker thread. Notification
 /// callbacks arrive on Windows audio threads; they only capture their data and enqueue work.
 /// The worker also re-enumerates endpoints and re-reads volumes periodically, in case a
-/// notification is missed.
+/// notification is missed. Volumes remembered for endpoints that went away are kept in memory
+/// only (until roadmap step 4).
 /// </remarks>
-public sealed class EndpointVolumeMonitor : IDisposable
+public sealed class EndpointVolumeGuard : IDisposable
 {
     private static readonly TimeSpan s_safetyPollInterval = TimeSpan.FromSeconds(2);
 
     private readonly DeviceNameMask _mask;
+    private readonly VolumeJumpPolicy _policy;
     private readonly ILog _log;
+    private readonly TimeProvider _time;
     private readonly BlockingCollection<Action> _queue = [];
     private readonly Dictionary<string, WatchedEndpoint> _watched = [];
+    private readonly Dictionary<string, int> _remembered = [];
     private readonly Thread _worker;
 
     private MMDeviceEnumerator? _enumerator;
     private MMDeviceNotificationClient? _deviceNotifications;
 
-    public EndpointVolumeMonitor(DeviceNameMask mask, ILog log)
+    public EndpointVolumeGuard(DeviceNameMask mask, VolumeJumpPolicy policy, ILog log, TimeProvider? time = null)
     {
         _mask = mask;
+        _policy = policy;
         _log = log;
+        _time = time ?? TimeProvider.System;
         _worker = new Thread(Run) { IsBackground = true, Name = "BtVolumeGuard audio" };
     }
 
@@ -64,7 +70,7 @@ public sealed class EndpointVolumeMonitor : IDisposable
                 }
                 else if (!_queue.IsAddingCompleted)
                 {
-                    Execute(() => Synchronize(fromSafetyPoll: true));
+                    Execute(() => Synchronize(isStartup: false, fromSafetyPoll: true));
                 }
             }
         }
@@ -74,7 +80,7 @@ public sealed class EndpointVolumeMonitor : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Write($"Monitor failed: {ex}");
+            _log.Write($"Guard failed: {ex}");
         }
         finally
         {
@@ -96,7 +102,9 @@ public sealed class EndpointVolumeMonitor : IDisposable
 
     private void Initialize()
     {
-        _log.Write($"Monitor started. Mask '{_mask}'. Diagnostic mode: volume is logged, never changed.");
+        _log.Write(
+            $"Guard started. Mask '{_mask}', maximum >= {_policy.MaxThreshold}%, jump >= {_policy.MinJump}%, " +
+            $"default {_policy.DefaultVolume}%, profile switch window {_policy.ProfileSwitchWindow.TotalSeconds:0.#} s.");
 
         _enumerator = new MMDeviceEnumerator();
         _deviceNotifications = _enumerator.CreateNotificationClient(useSynchronizationContext: false);
@@ -113,7 +121,7 @@ public sealed class EndpointVolumeMonitor : IDisposable
         };
 
         LogAllMatchingEndpoints();
-        Synchronize(fromSafetyPoll: false);
+        Synchronize(isStartup: true, fromSafetyPoll: false);
     }
 
     private void Shutdown()
@@ -126,7 +134,7 @@ public sealed class EndpointVolumeMonitor : IDisposable
         _watched.Clear();
         _deviceNotifications?.Dispose();
         _enumerator?.Dispose();
-        _log.Write("Monitor stopped.");
+        _log.Write("Guard stopped.");
     }
 
     private void Enqueue(Action work)
@@ -174,14 +182,14 @@ public sealed class EndpointVolumeMonitor : IDisposable
             _log.Write($"[{name}] device {what}");
         }
 
-        Synchronize(fromSafetyPoll: false);
+        Synchronize(isStartup: false, fromSafetyPoll: false);
     }
 
     /// <summary>
     /// Starts watching matching endpoints that became active, stops watching those that are gone,
     /// and re-reads the volume of watched endpoints to catch missed notifications.
     /// </summary>
-    private void Synchronize(bool fromSafetyPoll)
+    private void Synchronize(bool isStartup, bool fromSafetyPoll)
     {
         var active = new HashSet<string>();
 
@@ -205,6 +213,11 @@ public sealed class EndpointVolumeMonitor : IDisposable
             var endpoint = new WatchedEndpoint(id, name, device, this);
             _watched.Add(id, endpoint);
             _log.Write($"[{name}] watching, volume {endpoint.DescribeCurrent()}");
+
+            if (!isStartup)
+            {
+                endpoint.OnAppeared(_remembered.TryGetValue(id, out int remembered) ? remembered : null);
+            }
         }
 
         foreach (string id in _watched.Keys.Where(id => !active.Contains(id)).ToList())
@@ -251,20 +264,25 @@ public sealed class EndpointVolumeMonitor : IDisposable
     {
         private readonly MMDevice _device;
         private readonly AudioEndpointVolume _volume;
-        private readonly EndpointVolumeMonitor _owner;
+        private readonly EndpointVolumeGuard _owner;
+        private readonly EndpointGuard _guard;
 
         private float _lastScalar;
         private bool _lastMuted;
+        private (int Percent, bool Muted)? _pendingCheck;
 
-        public WatchedEndpoint(string id, string name, MMDevice device, EndpointVolumeMonitor owner)
+        public WatchedEndpoint(string id, string name, MMDevice device, EndpointVolumeGuard owner)
         {
             Id = id;
             Name = name;
             _device = device;
             _owner = owner;
             _volume = device.AudioEndpointVolume;
+            _volume.NotificationGuid = VolumeChangeContexts.Own;
             _lastScalar = _volume.MasterVolumeLevelScalar;
             _lastMuted = _volume.Mute;
+            _guard = new EndpointGuard(owner._policy, VolumeLevel.ToPercent(_lastScalar));
+            Remember();
             _volume.OnVolumeNotification += OnVolumeNotification;
         }
 
@@ -274,21 +292,37 @@ public sealed class EndpointVolumeMonitor : IDisposable
 
         public string DescribeCurrent() => Describe(_lastScalar, _lastMuted);
 
+        public void OnAppeared(int? remembered)
+        {
+            if (_guard.OnAppeared(remembered) is { } target)
+            {
+                SetVolume(target, $"appeared at {DescribeCurrent()}");
+            }
+        }
+
+        /// <summary>
+        /// Reports a volume that differs from the last notified one only if it is seen on two
+        /// checks in a row: the notification may simply be late, and it carries the context the
+        /// guard needs to recognise a headset jump.
+        /// </summary>
         public void CheckForMissedChange(bool fromSafetyPoll)
         {
             float scalar = _volume.MasterVolumeLevelScalar;
             bool muted = _volume.Mute;
             if (VolumeLevel.ToPercent(scalar) == VolumeLevel.ToPercent(_lastScalar) && muted == _lastMuted)
             {
+                _pendingCheck = null;
+                return;
+            }
+
+            if (_pendingCheck != (VolumeLevel.ToPercent(scalar), muted))
+            {
+                _pendingCheck = (VolumeLevel.ToPercent(scalar), muted);
                 return;
             }
 
             string source = fromSafetyPoll ? "safety poll" : "re-read";
-            _owner._log.Write(
-                $"[{Name}] volume {Describe(_lastScalar, _lastMuted)} -> {Describe(scalar, muted)} " +
-                $"found by {source}, no notification");
-            _lastScalar = scalar;
-            _lastMuted = muted;
+            Handle(VolumeChangeSource.Unknown, scalar, muted, _owner._time.GetUtcNow(), $"found by {source}, no notification");
         }
 
         public void Dispose()
@@ -300,23 +334,68 @@ public sealed class EndpointVolumeMonitor : IDisposable
         // Windows audio thread: capture the data and hand off to the worker.
         private void OnVolumeNotification(AudioVolumeNotificationData data)
         {
+            DateTimeOffset at = _owner._time.GetUtcNow();
             Guid context = data.EventContext;
             float scalar = data.MasterVolume;
             bool muted = data.Muted;
-            _owner.Enqueue(() => OnVolumeChanged(context, scalar, muted));
+            _owner.Enqueue(() => OnVolumeChanged(context, scalar, muted, at));
         }
 
-        private void OnVolumeChanged(Guid context, float scalar, bool muted)
+        private void OnVolumeChanged(Guid context, float scalar, bool muted, DateTimeOffset at)
         {
             if (!_owner._watched.TryGetValue(Id, out WatchedEndpoint? current) || current != this)
             {
                 return;
             }
 
-            _owner._log.Write(
-                $"[{Name}] volume {Describe(_lastScalar, _lastMuted)} -> {Describe(scalar, muted)}, context {context}");
+            VolumeChangeSource source = VolumeChangeContexts.Classify(context);
+            Handle(source, scalar, muted, at, $"context {context} ({source})");
+        }
+
+        private void Handle(VolumeChangeSource source, float scalar, bool muted, DateTimeOffset at, string origin)
+        {
+            string change = $"[{Name}] volume {Describe(_lastScalar, _lastMuted)} -> {Describe(scalar, muted)}, {origin}";
+            bool muteChanged = muted != _lastMuted;
             _lastScalar = scalar;
             _lastMuted = muted;
+            _pendingCheck = null;
+
+            GuardDecision decision = _guard.OnChange(source, VolumeLevel.ToPercent(scalar), at);
+            switch (decision.Action)
+            {
+                case GuardAction.Revert:
+                    _owner._log.Write($"{change}: {decision.Reason}");
+                    SetVolume(decision.Target!.Value, "reverted");
+                    break;
+
+                case GuardAction.Accept:
+                    _owner._log.Write(change);
+                    Remember();
+                    break;
+
+                case GuardAction.Ignore when source == VolumeChangeSource.Own || muteChanged:
+                    _owner._log.Write($"{change}: {decision.Reason}");
+                    break;
+
+                default:
+                    // Same percent (driver echoes, duplicate notifications): not worth a log line.
+                    break;
+            }
+        }
+
+        private void SetVolume(int percent, string why)
+        {
+            _volume.MasterVolumeLevelScalar = percent / 100f;
+            _lastScalar = percent / 100f;
+            _owner._log.Write($"[{Name}] {why}: set volume {percent}%");
+        }
+
+        private void Remember()
+        {
+            if (_guard.Remembered is { } remembered)
+            {
+                _owner._remembered[Id] = remembered;
+            }
         }
     }
 }
