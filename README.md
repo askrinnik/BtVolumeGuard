@@ -1,5 +1,8 @@
 # BtVolumeGuard
 
+[![CI](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/askrinnik/BtVolumeGuard)](https://github.com/askrinnik/BtVolumeGuard/releases/latest)
+
 A Windows tray app that stops Bluetooth headsets from jumping to 100% volume when a call starts.
 
 ## The problem
