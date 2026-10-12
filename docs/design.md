@@ -49,7 +49,7 @@
 
 Still to check:
 
-- Are `03016827-…` and `0de6c1af-…` stable across headset reconnects and reboots? If not, the fallback rule below (single-step jump from an unknown source) still catches large jumps, but not a small one such as 88% → 100%.
+- Are `03016827-…` and `0de6c1af-…` stable across reboots? **Stable across headset reconnects** (checked 2026-10-12: headset off and on twice, then a call: same contexts, jump reverted 526 ms after the switch). Reboot not checked yet. If they change, the fallback rule below (single-step jump from an unknown source) still catches large jumps, but not a small one such as 88% → 100%.
 
 ## Guard rules
 
