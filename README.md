@@ -1,12 +1,12 @@
-# BtVolumeGuard
+<p align="center">
+  <img src="docs/social-preview.png" width="800" alt="BtVolumeGuard: a Windows tray app that stops Bluetooth headsets from jumping to 100% volume when a call starts">
+</p>
 
 [![CI](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/askrinnik/BtVolumeGuard/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/askrinnik/BtVolumeGuard)](https://github.com/askrinnik/BtVolumeGuard/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-
-A Windows tray app that stops Bluetooth headsets from jumping to 100% volume when a call starts.
 
 ## The problem
 
@@ -41,6 +41,12 @@ BtVolumeGuard runs in the system tray and watches the volume of the selected Blu
 - If a separate `Hands-Free` device appears already at 100% (seen on other setups), the last known volume or a default of 20% is applied.
 
 It reacts to Windows Core Audio notifications (via [NAudio](https://github.com/naudio/NAudio)) rather than polling, so the correction should be fast enough to go unnoticed. How the jump was analysed: [`docs/design.md`](docs/design.md).
+
+Everything is in the tray menu (left or right click on the icon): the current headset volume, turning the guard and revert notifications on or off, starting with Windows, the log level, and the log and settings files. The shield in the icon turns grey while the guard is off.
+
+<p align="center">
+  <img src="docs/screenshots/tray-menu.png" alt="Tray menu: Headphones (LK12): 36%, Guard enabled, Notify when a jump is reverted, Start with Windows, Log submenu (Off / Normal / Verbose, Open log, Clear log), Open settings, Reload settings, Exit">
+</p>
 
 A working PowerShell prototype of the same idea is in [`prototype/LK12-VolumeGuard.ps1`](prototype/LK12-VolumeGuard.ps1) (polling every 100 ms, verified by simulating a jump; not yet verified on a real call).
 
