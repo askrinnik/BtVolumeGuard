@@ -28,7 +28,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _enabledItem;
     private readonly ToolStripMenuItem _notifyItem;
     private readonly ToolStripMenuItem _startupItem;
-    private readonly ToolStripMenuItem _logLevelItem;
+    private readonly ToolStripMenuItem[] _logLevelItems;
+    private readonly ToolStripMenuItem _openLogItem;
+    private readonly ToolStripMenuItem _clearLogItem;
 
     private AppSettings _settings = new();
     private bool _settingsFileUsable;
@@ -46,11 +48,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _enabledItem = new ToolStripMenuItem("Guard enabled", null, (_, _) => ToggleGuard());
         _notifyItem = new ToolStripMenuItem("Notify when a jump is reverted", null, (_, _) => ToggleNotify());
         _startupItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleStartup());
-        _logLevelItem = new ToolStripMenuItem("Log level");
-        foreach (LogLevel level in Enum.GetValues<LogLevel>())
-        {
-            _logLevelItem.DropDownItems.Add(new ToolStripMenuItem(DescribeLogLevel(level), null, (_, _) => SetLogLevel(level)) { Tag = level });
-        }
+        _logLevelItems =
+        [
+            .. Enum.GetValues<LogLevel>().Select(level =>
+                new ToolStripMenuItem(DescribeLogLevel(level), null, (_, _) => SetLogLevel(level)) { Tag = level }),
+        ];
+        _openLogItem = new ToolStripMenuItem("Open log", null, (_, _) => OpenFile(_log.Path));
+        _clearLogItem = new ToolStripMenuItem("Clear log", null, (_, _) => _log.Clear());
+        var logItem = new ToolStripMenuItem("Log");
+        logItem.DropDownItems.AddRange([.. _logLevelItems, new ToolStripSeparator(), _openLogItem, _clearLogItem]);
+        logItem.DropDownOpening += (_, _) => UpdateLogMenu();
 
         var menu = new ContextMenuStrip();
         menu.Items.AddRange(
@@ -61,8 +68,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _notifyItem,
             _startupItem,
             new ToolStripSeparator(),
-            _logLevelItem,
-            new ToolStripMenuItem("Open log", null, (_, _) => OpenFile(_log.Path)),
+            logItem,
             new ToolStripMenuItem("Open settings", null, (_, _) => OpenFile(AppSettings.DefaultPath)),
             new ToolStripMenuItem("Reload settings", null, (_, _) => StartGuard()),
             new ToolStripSeparator(),
@@ -210,10 +216,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _enabledItem.Checked = _settings.GuardEnabled;
         _notifyItem.Checked = _settings.NotifyOnRevert;
         _startupItem.Checked = StartupRegistration.IsEnabled();
-        foreach (ToolStripMenuItem item in _logLevelItem.DropDownItems)
+    }
+
+    private void UpdateLogMenu()
+    {
+        foreach (ToolStripMenuItem item in _logLevelItems)
         {
             item.Checked = (LogLevel)item.Tag! == _settings.LogLevel;
         }
+
+        bool hasLog = File.Exists(_log.Path) && new FileInfo(_log.Path).Length > 0;
+        _openLogItem.Enabled = hasLog;
+        _clearLogItem.Enabled = hasLog;
     }
 
     private void UpdateTooltip()

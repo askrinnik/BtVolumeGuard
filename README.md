@@ -40,7 +40,7 @@ A working PowerShell prototype of the same idea is in [`prototype/LK12-VolumeGua
 
 ## Status
 
-Early development. The guard (roadmap step 3) is implemented: the tray app reverts the jump and logs reverted jumps to `BtVolumeGuard.log` next to the executable (tray menu → Open log; log level `Off`, `Normal` or `Verbose`, where `Verbose` also records every volume change with its event context). Verified on real Teams calls. Settings and remembered volumes are stored as JSON next to the executable (`BtVolumeGuard.settings.json`, `BtVolumeGuard.state.json`). The tray menu shows the current headset volume and lets you turn the guard and revert notifications on or off, start the app with Windows, open the log and settings, and reload settings. Publishing is next; see [`docs/design.md`](docs/design.md).
+Early development. The guard (roadmap step 3) is implemented: the tray app reverts the jump and logs reverted jumps to `BtVolumeGuard.log` next to the executable (tray menu → Log: level, open, clear; level `Off`, `Normal` or `Verbose`, where `Verbose` also records every volume change with its event context). Verified on real Teams calls. Settings and remembered volumes are stored as JSON next to the executable (`BtVolumeGuard.settings.json`, `BtVolumeGuard.state.json`). The tray menu shows the current headset volume and lets you turn the guard and revert notifications on or off, start the app with Windows, open the settings and reload them. Publishing is next; see [`docs/design.md`](docs/design.md).
 
 ## Build and run
 

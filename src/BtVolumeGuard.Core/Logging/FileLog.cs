@@ -32,6 +32,24 @@ public sealed class FileLog : ILog
         set => Volatile.Write(ref _level, (int)value);
     }
 
+    /// <summary>Deletes the log file. Lines written afterwards start a new file.</summary>
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            try
+            {
+                File.Delete(Path);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
     public void Write(LogLevel level, string message)
     {
         if (level == LogLevel.Off || level > Level)

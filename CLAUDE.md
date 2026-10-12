@@ -44,7 +44,7 @@ Unit tests cannot cover Core Audio or the headset. Behavior that depends on them
 
 - The jump happens only on a call: the headset switches to HFP inside `Headphones (LK12)` (no separate Hands-Free endpoint on this machine). To test, start a Teams meeting (or any app that opens the headset microphone) with the LK12 connected. Only the user can do this; ask them, and say exactly what to look for in the log.
 - To test reverting without a call, point the device mask at another endpoint (e.g. `*Realtek*`) and change its volume programmatically. Restore the original volume afterwards.
-- To read event-context GUIDs from a real call, ask the user to set the log level to `Verbose` (tray menu → Log level) first; at `Normal` volume changes are not logged.
+- To read event-context GUIDs from a real call, ask the user to set the log level to `Verbose` (tray menu → Log) first; at `Normal` volume changes are not logged.
 - Report what was verified on a real call and what was only simulated.
 
 ## Do not

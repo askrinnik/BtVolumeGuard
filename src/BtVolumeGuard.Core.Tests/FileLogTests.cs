@@ -37,6 +37,20 @@ public sealed class FileLogTests : IDisposable
         Assert.Equal(2, WriteBoth(LogLevel.Verbose).Length);
 
     [Fact]
+    public void Clear_removes_old_lines_and_logging_continues()
+    {
+        string path = Path.Combine(_dir, "clear.log");
+        var log = new FileLog(path, LogLevel.Normal);
+
+        log.Write("old");
+        log.Clear();
+        Assert.False(File.Exists(path));
+
+        log.Write("new");
+        Assert.EndsWith("new", Assert.Single(File.ReadAllLines(path)));
+    }
+
+    [Fact]
     public void Level_can_change_at_runtime()
     {
         string path = Path.Combine(_dir, "runtime.log");
