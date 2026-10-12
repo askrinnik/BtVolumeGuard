@@ -6,6 +6,18 @@ using Microsoft.Win32;
 
 namespace BtVolumeGuard;
 
+internal enum GlyphStyle
+{
+    /// <summary>White glyph, for a dark taskbar.</summary>
+    Light,
+
+    /// <summary>Near-black glyph, for a light taskbar.</summary>
+    Dark,
+
+    /// <summary>Near-black glyph with a white outline, for any background (the executable's icon).</summary>
+    DarkWithHalo,
+}
+
 /// <summary>
 /// Draws the tray icon at the exact tray size: a headset glyph from the Windows icon font
 /// (white on a dark taskbar, black on a light one) with a shield badge: green while the guard
@@ -29,17 +41,10 @@ internal static class TrayIconRenderer
         return key?.GetValue("SystemUsesLightTheme") is int value && value != 0;
     }
 
-    /// <summary>Creates the icon; the caller owns and disposes it.</summary>
+    /// <summary>Creates the tray icon; the caller owns and disposes it.</summary>
     public static Icon Create(int size, bool lightTaskbar, bool guardEnabled)
     {
-        using var bitmap = new Bitmap(size, size);
-        using (Graphics g = Graphics.FromImage(bitmap))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            Draw(g, size, lightTaskbar, guardEnabled);
-        }
-
+        using Bitmap bitmap = Render(size, lightTaskbar ? GlyphStyle.Dark : GlyphStyle.Light, guardEnabled);
         IntPtr handle = bitmap.GetHicon();
         try
         {
@@ -52,15 +57,46 @@ internal static class TrayIconRenderer
         }
     }
 
-    private static void Draw(Graphics g, float s, bool lightTaskbar, bool guardEnabled)
+    /// <summary>
+    /// Draws the icon into a new bitmap. Also used by tools/make-icon.ps1 to build the executable's
+    /// .ico with <see cref="GlyphStyle.DarkWithHalo"/>, which stays visible on light and dark backgrounds.
+    /// </summary>
+    public static Bitmap Render(int size, GlyphStyle style, bool guardEnabled)
+    {
+        var bitmap = new Bitmap(size, size);
+        using Graphics g = Graphics.FromImage(bitmap);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        Draw(g, size, style, guardEnabled);
+        return bitmap;
+    }
+
+    private static void Draw(Graphics g, float s, GlyphStyle style, bool guardEnabled)
     {
         string? fontName = s_iconFonts.FirstOrDefault(IsInstalled);
         if (fontName is not null)
         {
-            using var font = new Font(fontName, s * 0.9f, GraphicsUnit.Pixel);
-            using var glyphBrush = new SolidBrush(lightTaskbar ? Color.FromArgb(0x1B, 0x1B, 0x1B) : Color.White);
+            var bounds = new RectangleF(-s * 0.04f, s * 0.02f, s * 0.9f, s * 0.9f);
             using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            g.DrawString(HeadsetGlyph.ToString(), font, glyphBrush, new RectangleF(-s * 0.04f, s * 0.02f, s * 0.9f, s * 0.9f), format);
+            Color glyphColor = style == GlyphStyle.Light ? Color.White : Color.FromArgb(0x1B, 0x1B, 0x1B);
+            using var glyphBrush = new SolidBrush(glyphColor);
+
+            if (style == GlyphStyle.DarkWithHalo)
+            {
+                // Slightly smaller and inset, so the outline does not touch the edges.
+                var inset = new RectangleF(s * 0.03f, s * 0.07f, s * 0.84f, s * 0.84f);
+                using var family = new FontFamily(fontName);
+                using var glyph = new GraphicsPath();
+                glyph.AddString(HeadsetGlyph.ToString(), family, (int)FontStyle.Regular, s * 0.84f, inset, format);
+                using var halo = new Pen(Color.FromArgb(230, Color.White), Math.Max(1.5f, s * 0.09f)) { LineJoin = LineJoin.Round };
+                g.DrawPath(halo, glyph);
+                g.FillPath(glyphBrush, glyph);
+            }
+            else
+            {
+                using var font = new Font(fontName, s * 0.9f, GraphicsUnit.Pixel);
+                g.DrawString(HeadsetGlyph.ToString(), font, glyphBrush, bounds, format);
+            }
         }
 
         float w = s * 0.52f;

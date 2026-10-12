@@ -52,6 +52,17 @@ dotnet test src
 dotnet run --project src/BtVolumeGuard
 ```
 
+## Install
+
+The app is a single `BtVolumeGuard.exe` (framework-dependent, needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)). It keeps its settings, remembered volumes and log next to itself, so put it in a folder you can write to (not `Program Files`).
+
+```powershell
+.\tools\publish.ps1                                   # builds publish\BtVolumeGuard.exe
+.\tools\publish.ps1 -InstallDir D:\Tools\BtVolumeGuard  # also copies it there (stops and restarts a running copy)
+```
+
+Start the installed exe once and use the tray menu → "Start with Windows" to run it at logon. Updating is the same `-InstallDir` command; settings and the log are kept.
+
 ## Repository layout
 
 ```
@@ -59,6 +70,8 @@ src/                           Self-contained C# solution: BtVolumeGuard.slnx, D
 src/BtVolumeGuard.Core/        Logic and Core Audio access (NAudio), no UI
 src/BtVolumeGuard/             WinForms tray app (WinExe)
 src/BtVolumeGuard.Core.Tests/  xUnit tests for Core
+tools/publish.ps1              Release build and install into a folder
+tools/make-icon.ps1            Regenerates the executable's icon
 prototype/                     PowerShell prototype
 docs/design.md                 Requirements, design decisions, roadmap
 ```

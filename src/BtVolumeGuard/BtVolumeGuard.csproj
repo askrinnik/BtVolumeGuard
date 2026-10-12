@@ -10,6 +10,11 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Regenerate with tools/make-icon.ps1 after changing TrayIconRenderer. -->
+    <ApplicationIcon>BtVolumeGuard.ico</ApplicationIcon>
+    <Version>0.1.0</Version>
+    <Product>BtVolumeGuard</Product>
+    <Description>Reverts Bluetooth headset volume jumps to 100% at the start of a call.</Description>
   </PropertyGroup>
 
 </Project>

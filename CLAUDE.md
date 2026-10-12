@@ -9,6 +9,8 @@ dotnet build src                              # whole solution (src/BtVolumeGuar
 dotnet test src                               # xUnit tests for Core
 dotnet run --project src/BtVolumeGuard        # run the tray app
 dotnet format src --verify-no-changes         # check formatting against src/.editorconfig
+.\tools\publish.ps1 [-InstallDir <folder>]    # release single-file exe to publish\ (PowerShell 7)
+.\tools\make-icon.ps1                         # regenerate src/BtVolumeGuard/BtVolumeGuard.ico (PowerShell 7)
 ```
 
 Before running the tray app, make sure no earlier instance is running (single-instance mutex `Local\BtVolumeGuard`; a second instance exits silently). Stop it with `Stop-Process -Name BtVolumeGuard`.
@@ -28,6 +30,7 @@ Before running the tray app, make sure no earlier instance is running (single-in
   - `Settings/VolumeMemory`: `BtVolumeGuard.state.json`, last volume below maximum per endpoint ID.
 - `src/BtVolumeGuard`: WinExe tray shell: `Program`, `TrayApplicationContext` (menu, tooltip, notifications), `TrayIconRenderer` (icon drawn at runtime), `StartupRegistration` (HKCU Run value, changed only from the menu). `--mask "<pattern>"` overrides the device mask from the settings file (default `*LK12*`).
 - `src/BtVolumeGuard.Core.Tests`: xUnit tests.
+- `tools/`: `publish.ps1` (framework-dependent single-file win-x64; with `-InstallDir` copies the exe, stopping and restarting a running copy), `make-icon.ps1` (draws the exe icon with `TrayIconRenderer`, style `DarkWithHalo`).
 - `prototype/LK12-VolumeGuard.ps1`: working PowerShell prototype (polling, own Core Audio interop). Reference for behavior; not built or shipped.
 
 ## Conventions
