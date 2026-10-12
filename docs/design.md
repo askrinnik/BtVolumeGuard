@@ -13,6 +13,8 @@
 
 - The LK12 headset is Bluetooth Classic only (profiles HSP, HFP, AVRCP, A2DP; codecs SBC/AAC). No LE Audio.
 - `Headset (LK12 Hands-Free)` is **not** listed among active render endpoints outside of a call; it appears when a call opens the headset microphone. `Headset (LK12)` is the HFP **capture** endpoint (the microphone), not a playback device.
+- Outside of a call, `Headset (LK12 Hands-Free)` is not enumerated as a render endpoint in **any** state (not even `NotPresent`), while `Headphones (LK12)` has one `Active` and several stale `NotPresent` entries with different IDs (observed 2026-10-12).
+- Changes made through `SetMasterVolumeLevelScalar` with `Guid.Empty` (as the prototype does) arrive with event context `Guid.Empty`.
 
 ## Design decisions
 
@@ -34,7 +36,7 @@ First milestone must log the event context for every change, then verify on a re
 
 ## Roadmap
 
-1. **Core Audio layer:** enumerate matching endpoints, subscribe to volume and device notifications, log changes with event context. Diagnostic log only, no reverting yet.
+1. **Core Audio layer:** enumerate matching endpoints, subscribe to volume and device notifications, log changes with event context. Diagnostic log only, no reverting yet. *Done* (`EndpointVolumeMonitor`); verified with a simulated change on a Realtek endpoint, not yet on a call.
 2. **Verify on a real Teams call** and resolve the open question above.
 3. **Guard:** wire `VolumeJumpPolicy` into the event flow, revert jumps, remember volumes.
 4. **Settings and state** in `%LOCALAPPDATA%\BtVolumeGuard\` (JSON): device mask, thresholds, default volume, remembered volumes per endpoint ID. Log file in the same folder.
