@@ -32,6 +32,12 @@ public sealed record AppSettings
     /// <summary>How long after a profile switch the headset's push to maximum is reverted.</summary>
     public int ProfileSwitchWindowMs { get; init; } = 2000;
 
+    /// <summary>Whether jumps are reverted. Toggled from the tray menu.</summary>
+    public bool GuardEnabled { get; init; } = true;
+
+    /// <summary>Whether a notification is shown when a jump is reverted. Toggled from the tray menu.</summary>
+    public bool NotifyOnRevert { get; init; }
+
     public static string DefaultPath { get; } = Path.Combine(AppContext.BaseDirectory, FileName);
 
     /// <summary>Builds the decision policy; throws <see cref="ArgumentException"/> for invalid values.</summary>

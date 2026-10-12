@@ -26,7 +26,7 @@ Before running the tray app, make sure no earlier instance is running (single-in
   - `Logging/FileLog`: timestamped log, `BtVolumeGuard.log` next to the executable.
   - `Settings/AppSettings`: `BtVolumeGuard.settings.json` next to the executable (created with defaults if missing; invalid file → defaults + log line).
   - `Settings/VolumeMemory`: `BtVolumeGuard.state.json`, last volume below maximum per endpoint ID.
-- `src/BtVolumeGuard`: WinExe tray shell (`Program`, `TrayApplicationContext`). `--mask "<pattern>"` overrides the device mask from the settings file (default `*LK12*`).
+- `src/BtVolumeGuard`: WinExe tray shell: `Program`, `TrayApplicationContext` (menu, tooltip, notifications), `TrayIconRenderer` (icon drawn at runtime), `StartupRegistration` (HKCU Run value, changed only from the menu). `--mask "<pattern>"` overrides the device mask from the settings file (default `*LK12*`).
 - `src/BtVolumeGuard.Core.Tests`: xUnit tests.
 - `prototype/LK12-VolumeGuard.ps1`: working PowerShell prototype (polling, own Core Audio interop). Reference for behavior; not built or shipped.
 

@@ -8,7 +8,8 @@ namespace BtVolumeGuard;
 
 /// <summary>
 /// Draws the tray icon at the exact tray size: a headset glyph from the Windows icon font
-/// (white on a dark taskbar, black on a light one) with a green shield badge.
+/// (white on a dark taskbar, black on a light one) with a shield badge: green while the guard
+/// is on, grey while it is off.
 /// </summary>
 internal static class TrayIconRenderer
 {
@@ -18,6 +19,7 @@ internal static class TrayIconRenderer
     private static readonly string[] s_iconFonts = ["Segoe Fluent Icons", "Segoe MDL2 Assets"];
 
     private static readonly Color s_shieldColor = Color.FromArgb(0x16, 0xA3, 0x4A);
+    private static readonly Color s_disabledShieldColor = Color.FromArgb(0x8A, 0x8A, 0x8A);
 
     /// <summary>Whether the taskbar uses the light theme (per-user setting, read only).</summary>
     public static bool IsTaskbarLight()
@@ -28,14 +30,14 @@ internal static class TrayIconRenderer
     }
 
     /// <summary>Creates the icon; the caller owns and disposes it.</summary>
-    public static Icon Create(int size, bool lightTaskbar)
+    public static Icon Create(int size, bool lightTaskbar, bool guardEnabled)
     {
         using var bitmap = new Bitmap(size, size);
         using (Graphics g = Graphics.FromImage(bitmap))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            Draw(g, size, lightTaskbar);
+            Draw(g, size, lightTaskbar, guardEnabled);
         }
 
         IntPtr handle = bitmap.GetHicon();
@@ -50,7 +52,7 @@ internal static class TrayIconRenderer
         }
     }
 
-    private static void Draw(Graphics g, float s, bool lightTaskbar)
+    private static void Draw(Graphics g, float s, bool lightTaskbar, bool guardEnabled)
     {
         string? fontName = s_iconFonts.FirstOrDefault(IsInstalled);
         if (fontName is not null)
@@ -78,7 +80,7 @@ internal static class TrayIconRenderer
         }
 
         using GraphicsPath shield = Shield(x, y, w, h);
-        using var shieldBrush = new SolidBrush(s_shieldColor);
+        using var shieldBrush = new SolidBrush(guardEnabled ? s_shieldColor : s_disabledShieldColor);
         g.FillPath(shieldBrush, shield);
     }
 

@@ -33,6 +33,9 @@ public sealed class EndpointVolumeGuard : IDisposable
     private readonly VolumeMemory _memory;
     private readonly Thread _worker;
 
+    private volatile bool _enabled = true;
+    private volatile EndpointStatus[] _status = [];
+
     private MMDeviceEnumerator? _enumerator;
     private MMDeviceNotificationClient? _deviceNotifications;
 
@@ -46,6 +49,36 @@ public sealed class EndpointVolumeGuard : IDisposable
         _time = time ?? TimeProvider.System;
         _worker = new Thread(Run) { IsBackground = true, Name = "BtVolumeGuard audio" };
     }
+
+    /// <summary>Raised on the worker thread after the guard reverted a jump.</summary>
+    public event Action<RevertInfo>? Reverted;
+
+    /// <summary>Raised on the worker thread when <see cref="Status"/> changes.</summary>
+    public event Action? StatusChanged;
+
+    /// <summary>
+    /// When off, changes are only logged and remembered, never reverted. Can be set from any thread.
+    /// </summary>
+    public bool Enabled
+    {
+        get => _enabled;
+        set
+        {
+            if (_enabled == value)
+            {
+                return;
+            }
+
+            _enabled = value;
+            if (_worker.IsAlive)
+            {
+                _log.Write(value ? "Guard enabled." : "Guard disabled: changes are logged, not reverted.");
+            }
+        }
+    }
+
+    /// <summary>Watched endpoints and their volume; safe to read from any thread.</summary>
+    public IReadOnlyList<EndpointStatus> Status => _status;
 
     public void Start() => _worker.Start();
 
@@ -107,7 +140,8 @@ public sealed class EndpointVolumeGuard : IDisposable
     {
         _log.Write(
             $"Guard started. Mask '{_mask}', maximum >= {_policy.MaxThreshold}%, jump >= {_policy.MinJump}%, " +
-            $"default {_policy.DefaultVolume}%, profile switch window {_policy.ProfileSwitchWindow.TotalSeconds:0.#} s.");
+            $"default {_policy.DefaultVolume}%, profile switch window {_policy.ProfileSwitchWindow.TotalSeconds:0.#} s." +
+            (_enabled ? "" : " Guard is OFF: changes are logged, not reverted."));
 
         _enumerator = new MMDeviceEnumerator();
         _deviceNotifications = _enumerator.CreateNotificationClient(useSynchronizationContext: false);
@@ -230,6 +264,20 @@ public sealed class EndpointVolumeGuard : IDisposable
             gone.Dispose();
             _log.Write($"[{gone.Name}] no longer active, stopped watching");
         }
+
+        PublishStatus();
+    }
+
+    private void PublishStatus()
+    {
+        EndpointStatus[] status = [.. _watched.Values.Select(e => e.ToStatus()).OrderBy(s => s.Name)];
+        if (status.SequenceEqual(_status))
+        {
+            return;
+        }
+
+        _status = status;
+        StatusChanged?.Invoke();
     }
 
     private string? TryGetNameById(string deviceId)
@@ -363,12 +411,20 @@ public sealed class EndpointVolumeGuard : IDisposable
             _lastMuted = muted;
             _pendingCheck = null;
 
+            // While the guard is off every change is trusted, so the state stays in sync for when it is back on.
+            if (!_owner._enabled && source != VolumeChangeSource.Own)
+            {
+                source = VolumeChangeSource.User;
+                change += " [guard off]";
+            }
+
             GuardDecision decision = _guard.OnChange(source, VolumeLevel.ToPercent(scalar), at);
             switch (decision.Action)
             {
                 case GuardAction.Revert:
                     _owner._log.Write($"{change}: {decision.Reason}");
                     SetVolume(decision.Target!.Value, "reverted");
+                    _owner.Reverted?.Invoke(new RevertInfo(Name, VolumeLevel.ToPercent(scalar), decision.Target.Value));
                     break;
 
                 case GuardAction.Accept:
@@ -384,7 +440,11 @@ public sealed class EndpointVolumeGuard : IDisposable
                     // Same percent (driver echoes, duplicate notifications): not worth a log line.
                     break;
             }
+
+            _owner.PublishStatus();
         }
+
+        public EndpointStatus ToStatus() => new(Name, _guard.Volume, _lastMuted);
 
         private void SetVolume(int percent, string why)
         {
