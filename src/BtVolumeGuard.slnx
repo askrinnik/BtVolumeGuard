@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="BtVolumeGuard.Core/BtVolumeGuard.Core.csproj" />
+  <Project Path="BtVolumeGuard/BtVolumeGuard.csproj" />
+  <Project Path="BtVolumeGuard.Core.Tests/BtVolumeGuard.Core.Tests.csproj" />
+</Solution>

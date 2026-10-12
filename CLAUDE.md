@@ -5,25 +5,27 @@ Windows tray app (.NET 10, WinForms) that reverts Bluetooth headset volume jumps
 ## Commands
 
 ```bash
-dotnet build                                  # whole solution; warnings are errors
-dotnet test                                   # xUnit tests for Core
+dotnet build src                              # whole solution (src/BtVolumeGuard.slnx); warnings are errors
+dotnet test src                               # xUnit tests for Core
 dotnet run --project src/BtVolumeGuard        # run the tray app
-dotnet format --verify-no-changes             # check formatting against .editorconfig
+dotnet format src --verify-no-changes         # check formatting against src/.editorconfig
 ```
 
 Before running the tray app, make sure no earlier instance is running (single-instance mutex `Local\BtVolumeGuard`; a second instance exits silently). Stop it with `Stop-Process -Name BtVolumeGuard`.
 
 ## Layout
 
+`src/` is a self-contained C# solution: `BtVolumeGuard.slnx` (flat, no solution folders), `Directory.Build.props`, `.editorconfig` and all projects, including tests.
+
 - `src/BtVolumeGuard.Core`: logic and Core Audio access (NAudio.Wasapi). No UI.
   - `VolumeJumpPolicy`: pure decision logic (jump detection, volume on endpoint appearance).
 - `src/BtVolumeGuard`: WinExe tray shell (`Program`, `TrayApplicationContext`).
-- `tests/BtVolumeGuard.Core.Tests`: xUnit tests.
+- `src/BtVolumeGuard.Core.Tests`: xUnit tests.
 - `prototype/LK12-VolumeGuard.ps1`: working PowerShell prototype (polling, own Core Audio interop). Reference for behavior; not built or shipped.
 
 ## Conventions
 
-- All projects target `net10.0-windows`. Shared settings live in `Directory.Build.props` (nullable, implicit usings, `TreatWarningsAsErrors`).
+- All projects target `net10.0-windows`. Shared settings live in `src/Directory.Build.props` (nullable, implicit usings, `TreatWarningsAsErrors`).
 - Keep decision logic in pure classes in Core with unit tests; keep NAudio/COM code thin and separate.
 - Never set volume or do blocking work inside Core Audio notification callbacks; hand off to another thread.
 - Tag the app's own volume changes with its event-context GUID and ignore notifications that carry it.

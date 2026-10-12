@@ -46,17 +46,18 @@ Early development. The solution skeleton, the jump-detection policy with unit te
 Requires the .NET 10 SDK, Windows 10/11.
 
 ```bash
-dotnet build
-dotnet test
+dotnet build src
+dotnet test src
 dotnet run --project src/BtVolumeGuard
 ```
 
 ## Repository layout
 
 ```
+src/                           Self-contained C# solution: BtVolumeGuard.slnx, Directory.Build.props, .editorconfig
 src/BtVolumeGuard.Core/        Logic and Core Audio access (NAudio), no UI
 src/BtVolumeGuard/             WinForms tray app (WinExe)
-tests/BtVolumeGuard.Core.Tests xUnit tests for Core
+src/BtVolumeGuard.Core.Tests/  xUnit tests for Core
 prototype/                     PowerShell prototype
 docs/design.md                 Requirements, design decisions, roadmap
 ```

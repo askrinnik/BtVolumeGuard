@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\BtVolumeGuard.Core\BtVolumeGuard.Core.csproj" />
+    <ProjectReference Include="..\BtVolumeGuard.Core\BtVolumeGuard.Core.csproj" />
   </ItemGroup>
 
 </Project>
