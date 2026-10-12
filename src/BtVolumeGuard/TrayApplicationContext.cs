@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Reflection;
 
 using BtVolumeGuard.Core;
 using BtVolumeGuard.Core.Audio;
@@ -73,6 +74,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
         _trayIcon = new NotifyIcon { ContextMenuStrip = menu };
+        _trayIcon.MouseUp += OnTrayIconMouseUp;
         StartGuard();
         _trayIcon.Visible = true;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
@@ -231,6 +233,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
         return endpoints.Count == 0
             ? $"No active device matches {_mask}"
             : string.Join(separator, endpoints.Select(e => $"{e.Name}: {e.Volume}%{(e.Muted ? " (muted)" : "")}"));
+    }
+
+    // A left click opens the same menu as a right click. NotifyIcon's own ShowContextMenu positions
+    // the menu and makes it close when the user clicks elsewhere; it is not public, hence reflection.
+    private void OnTrayIconMouseUp(object? sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+        {
+            return;
+        }
+
+        typeof(NotifyIcon)
+            .GetMethod("ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)?
+            .Invoke(_trayIcon, null);
     }
 
     // Taskbar theme or DPI may have changed: redraw the icon to match.
