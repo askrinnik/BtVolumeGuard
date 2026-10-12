@@ -7,7 +7,7 @@
 3. When an endpoint appears (after startup) already at maximum, set the remembered volume, or the default if none is known (`EndpointGuard.OnAppeared`).
 4. Remember the user's volume per endpoint (keyed by endpoint ID) and persist it across restarts.
 5. Tray-only UI, no main window. No admin rights. Single instance per user session.
-6. Log every correction with timestamps.
+6. Log every correction with timestamps. Log level in the settings: `Off`, `Normal` (corrections, endpoints, errors; default), `Verbose` (every volume change with its event context, for diagnostics).
 
 ## Facts about the headset
 

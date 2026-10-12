@@ -11,7 +11,7 @@ namespace BtVolumeGuard.Core.Audio;
 /// <summary>
 /// Watches playback endpoints whose name matches a mask and reverts headset-induced jumps to
 /// maximum volume (decisions by <see cref="EndpointGuard"/>). Logs endpoint arrival, removal,
-/// state changes and every volume change with its event context and the decision taken.
+/// state changes and reverted jumps; at verbose level also every volume change with its event context.
 /// </summary>
 /// <remarks>
 /// All Core Audio objects are created and used on one dedicated worker thread. Notification
@@ -57,7 +57,7 @@ public sealed class EndpointVolumeGuard : IDisposable
     public event Action? StatusChanged;
 
     /// <summary>
-    /// When off, changes are only logged and remembered, never reverted. Can be set from any thread.
+    /// When off, changes are only remembered (and logged at verbose level), never reverted. Can be set from any thread.
     /// </summary>
     public bool Enabled
     {
@@ -72,7 +72,7 @@ public sealed class EndpointVolumeGuard : IDisposable
             _enabled = value;
             if (_worker.IsAlive)
             {
-                _log.Write(value ? "Guard enabled." : "Guard disabled: changes are logged, not reverted.");
+                _log.Write(value ? "Guard enabled." : "Guard disabled: jumps are not reverted.");
             }
         }
     }
@@ -141,7 +141,7 @@ public sealed class EndpointVolumeGuard : IDisposable
         _log.Write(
             $"Guard started. Mask '{_mask}', maximum >= {_policy.MaxThreshold}%, jump >= {_policy.MinJump}%, " +
             $"default {_policy.DefaultVolume}%, profile switch window {_policy.ProfileSwitchWindow.TotalSeconds:0.#} s." +
-            (_enabled ? "" : " Guard is OFF: changes are logged, not reverted."));
+            (_enabled ? "" : " Guard is OFF: jumps are not reverted."));
 
         _enumerator = new MMDeviceEnumerator();
         _deviceNotifications = _enumerator.CreateNotificationClient(useSynchronizationContext: false);
@@ -428,12 +428,12 @@ public sealed class EndpointVolumeGuard : IDisposable
                     break;
 
                 case GuardAction.Accept:
-                    _owner._log.Write(change);
+                    _owner._log.Verbose(change);
                     Remember();
                     break;
 
                 case GuardAction.Ignore when source == VolumeChangeSource.Own || muteChanged:
-                    _owner._log.Write($"{change}: {decision.Reason}");
+                    _owner._log.Verbose($"{change}: {decision.Reason}");
                     break;
 
                 default:

@@ -1,3 +1,4 @@
+using BtVolumeGuard.Core.Logging;
 using BtVolumeGuard.Core.Settings;
 
 namespace BtVolumeGuard.Core.Tests;
@@ -32,6 +33,7 @@ public sealed class SettingsTests : IDisposable
               // headset of a colleague
               "DeviceMask": "*WH-1000*",
               "DefaultVolume": 30,
+              "LogLevel": "Verbose",
             }
             """);
 
@@ -40,6 +42,7 @@ public sealed class SettingsTests : IDisposable
         Assert.Null(problem);
         Assert.Equal("*WH-1000*", settings.DeviceMask);
         Assert.Equal(30, settings.DefaultVolume);
+        Assert.Equal(LogLevel.Verbose, settings.LogLevel);
         Assert.Equal(95, settings.MaxThreshold);
         Assert.Equal(TimeSpan.FromSeconds(2), settings.ToPolicy().ProfileSwitchWindow);
     }
@@ -48,6 +51,7 @@ public sealed class SettingsTests : IDisposable
     [InlineData("{ not json")]
     [InlineData("""{ "DefaultVolume": 99 }""")]
     [InlineData("""{ "DeviceMask": "" }""")]
+    [InlineData("""{ "LogLevel": "Loud" }""")]
     public void Invalid_settings_file_gives_defaults_and_a_problem_and_is_kept(string content)
     {
         string path = PathOf(AppSettings.FileName);

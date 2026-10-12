@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+
+using BtVolumeGuard.Core.Logging;
 
 namespace BtVolumeGuard.Core.Settings;
 
@@ -15,6 +18,7 @@ public sealed record AppSettings
         WriteIndented = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     /// <summary>Wildcard mask of playback endpoint names to guard.</summary>
@@ -37,6 +41,9 @@ public sealed record AppSettings
 
     /// <summary>Whether a notification is shown when a jump is reverted. Toggled from the tray menu.</summary>
     public bool NotifyOnRevert { get; init; }
+
+    /// <summary><c>Off</c>, <c>Normal</c> or <c>Verbose</c> (every volume change). Chosen in the tray menu.</summary>
+    public LogLevel LogLevel { get; init; } = LogLevel.Normal;
 
     public static string DefaultPath { get; } = Path.Combine(AppContext.BaseDirectory, FileName);
 

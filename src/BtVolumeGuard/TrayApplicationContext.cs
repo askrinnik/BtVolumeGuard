@@ -27,6 +27,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _enabledItem;
     private readonly ToolStripMenuItem _notifyItem;
     private readonly ToolStripMenuItem _startupItem;
+    private readonly ToolStripMenuItem _logLevelItem;
 
     private AppSettings _settings = new();
     private bool _settingsFileUsable;
@@ -44,6 +45,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _enabledItem = new ToolStripMenuItem("Guard enabled", null, (_, _) => ToggleGuard());
         _notifyItem = new ToolStripMenuItem("Notify when a jump is reverted", null, (_, _) => ToggleNotify());
         _startupItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleStartup());
+        _logLevelItem = new ToolStripMenuItem("Log level");
+        foreach (LogLevel level in Enum.GetValues<LogLevel>())
+        {
+            _logLevelItem.DropDownItems.Add(new ToolStripMenuItem(DescribeLogLevel(level), null, (_, _) => SetLogLevel(level)) { Tag = level });
+        }
 
         var menu = new ContextMenuStrip();
         menu.Items.AddRange(
@@ -54,6 +60,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _notifyItem,
             _startupItem,
             new ToolStripSeparator(),
+            _logLevelItem,
             new ToolStripMenuItem("Open log", null, (_, _) => OpenFile(_log.Path)),
             new ToolStripMenuItem("Open settings", null, (_, _) => OpenFile(AppSettings.DefaultPath)),
             new ToolStripMenuItem("Reload settings", null, (_, _) => StartGuard()),
@@ -89,6 +96,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         (_settings, string? settingsProblem) = AppSettings.Load(AppSettings.DefaultPath);
         _settingsFileUsable = settingsProblem is null;
+        _log.Level = _settings.LogLevel;
         if (settingsProblem is not null)
         {
             _log.Write(settingsProblem);
@@ -126,6 +134,30 @@ internal sealed class TrayApplicationContext : ApplicationContext
     }
 
     private void ToggleNotify() => SaveSettings(_settings with { NotifyOnRevert = !_settings.NotifyOnRevert });
+
+    private void SetLogLevel(LogLevel level)
+    {
+        // Write the line at whichever of the two levels is not Off, so the switch itself is recorded.
+        if (level == LogLevel.Off)
+        {
+            _log.Write("Log level: Off.");
+        }
+
+        _log.Level = level;
+        if (level != LogLevel.Off)
+        {
+            _log.Write($"Log level: {level}.");
+        }
+
+        SaveSettings(_settings with { LogLevel = level });
+    }
+
+    private static string DescribeLogLevel(LogLevel level) => level switch
+    {
+        LogLevel.Off => "Off",
+        LogLevel.Normal => "Normal (reverted jumps, errors)",
+        _ => "Verbose (every volume change)",
+    };
 
     private void ToggleStartup()
     {
@@ -176,6 +208,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _enabledItem.Checked = _settings.GuardEnabled;
         _notifyItem.Checked = _settings.NotifyOnRevert;
         _startupItem.Checked = StartupRegistration.IsEnabled();
+        foreach (ToolStripMenuItem item in _logLevelItem.DropDownItems)
+        {
+            item.Checked = (LogLevel)item.Tag! == _settings.LogLevel;
+        }
     }
 
     private void UpdateTooltip()
