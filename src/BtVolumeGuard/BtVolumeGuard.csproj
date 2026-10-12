@@ -12,7 +12,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Regenerate with tools/make-icon.ps1 after changing TrayIconRenderer. -->
     <ApplicationIcon>BtVolumeGuard.ico</ApplicationIcon>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>BtVolumeGuard</Product>
     <Authors>Alexander Skrinnik</Authors>
     <Copyright>Copyright (c) 2026 Alexander Skrinnik. MIT License.</Copyright>
