@@ -206,17 +206,20 @@ public sealed class EndpointVolumeGuard : IDisposable
     {
         if (deviceId is null)
         {
-            _log.Write($"Render device event: {what}, no device");
+            _log.Verbose($"Render device event: {what}, no device");
             return;
         }
 
-        string? name = _watched.TryGetValue(deviceId, out WatchedEndpoint? watched)
-            ? watched.Name
-            : TryGetNameById(deviceId);
+        // Raw Windows events are noisy: a Bluetooth disconnect walks every endpoint of the headset
+        // (playback, microphone, stale entries from earlier pairings) through several states.
+        // Normal level only gets the outcome from Synchronize: "watching" / "stopped watching".
+        (string Name, DataFlow Flow)? device = _watched.TryGetValue(deviceId, out WatchedEndpoint? watched)
+            ? (watched.Name, DataFlow.Render)
+            : TryDescribe(deviceId);
 
-        if (name is not null && _mask.IsMatch(name))
+        if (device is { } d && _mask.IsMatch(d.Name))
         {
-            _log.Write($"[{name}] device {what}");
+            _log.Verbose($"[{d.Name}] {d.Flow.ToString().ToLowerInvariant()} {ShortId(deviceId)}: device {what}");
         }
 
         Synchronize(isStartup: false, fromSafetyPoll: false);
@@ -249,7 +252,7 @@ public sealed class EndpointVolumeGuard : IDisposable
 
             var endpoint = new WatchedEndpoint(id, name, device, this);
             _watched.Add(id, endpoint);
-            _log.Write($"[{name}] watching, volume {endpoint.DescribeCurrent()}");
+            _log.Write($"[{name}] {ShortId(id)}: connected, watching, volume {endpoint.DescribeCurrent()}");
 
             if (!isStartup)
             {
@@ -262,7 +265,7 @@ public sealed class EndpointVolumeGuard : IDisposable
             WatchedEndpoint gone = _watched[id];
             _watched.Remove(id);
             gone.Dispose();
-            _log.Write($"[{gone.Name}] no longer active, stopped watching");
+            _log.Write($"[{gone.Name}] {ShortId(id)}: disconnected, stopped watching");
         }
 
         PublishStatus();
@@ -280,17 +283,25 @@ public sealed class EndpointVolumeGuard : IDisposable
         StatusChanged?.Invoke();
     }
 
-    private string? TryGetNameById(string deviceId)
+    private (string Name, DataFlow Flow)? TryDescribe(string deviceId)
     {
         try
         {
             using MMDevice device = _enumerator!.GetDevice(deviceId);
-            return TryGetName(device);
+            return (TryGetName(device), device.DataFlow);
         }
         catch (Exception)
         {
             return null;
         }
+    }
+
+    /// <summary>First block of the endpoint GUID, e.g. <c>aa9b8faf</c>: enough to tell endpoints apart in the log.</summary>
+    private static string ShortId(string deviceId)
+    {
+        string guid = deviceId[(deviceId.LastIndexOf('{') + 1)..];
+        int dash = guid.IndexOf('-');
+        return dash > 0 ? guid[..dash] : guid.TrimEnd('}');
     }
 
     private static string TryGetName(MMDevice device)
