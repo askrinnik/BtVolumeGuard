@@ -61,7 +61,7 @@ A working PowerShell prototype of the same idea is in [`prototype/LK12-VolumeGua
 
 ## Status
 
-Version 0.2.0, in daily use. Roadmap steps 1–6 and 8 are done (see [`docs/design.md`](docs/design.md)):
+Version 0.2.1, in daily use. Roadmap steps 1–6 and 8 are done (see [`docs/design.md`](docs/design.md)):
 
 - The tray app reverts the jump at the start of a call. Verified with the LK12 on real Teams calls, also after the headset was switched off and on again. Not yet verified with other headsets; reports are welcome.
 - Every Bluetooth playback device is guarded by default; the tray menu → Devices lists them (also the ones that are not connected) and lets you exclude some. The event contexts that identify the jump can be extended in the settings file.
