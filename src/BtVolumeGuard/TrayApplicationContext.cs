@@ -228,7 +228,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     }
 
     // Every Bluetooth playback device Windows knows, connected or not; disconnected ones stay
-    // clickable but are drawn in the grey text colour.
+    // clickable and are marked "(offline)".
     private void UpdateDevicesMenu()
     {
         _devicesItem.DropDownItems.Clear();
@@ -242,17 +242,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         foreach (KnownDevice device in devices)
         {
-            var item = new ToolStripMenuItem(device.Name, null, (_, _) => ToggleDevice(device))
-            {
-                Checked = device.Guarded,
-                ToolTipText = device.Connected ? "Connected" : "Not connected",
-            };
-            if (!device.Connected)
-            {
-                item.ForeColor = SystemColors.GrayText;
-            }
-
-            _devicesItem.DropDownItems.Add(item);
+            _devicesItem.DropDownItems.Add(
+                new ToolStripMenuItem(device.MenuText, null, (_, _) => ToggleDevice(device)) { Checked = device.Guarded });
         }
     }
 

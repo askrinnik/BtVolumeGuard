@@ -48,12 +48,12 @@ BtVolumeGuard runs in the system tray and guards **every Bluetooth playback devi
 
 It reacts to Windows Core Audio notifications (via [NAudio](https://github.com/naudio/NAudio)) rather than polling, so the correction should be fast enough to go unnoticed. How the jump was analysed: [`docs/design.md`](docs/design.md).
 
-Everything is in the tray menu (left or right click on the icon): the current headset volume, the **Devices** to guard (every Bluetooth playback device Windows knows; ones that are not connected are shown in grey), turning the guard and revert notifications on or off, starting with Windows, the log level, and the log and settings files. The shield in the icon turns grey while the guard is off.
+Everything is in the tray menu (left or right click on the icon): the current headset volume, the **Devices** to guard (every Bluetooth playback device Windows knows; ones that are not connected are marked "(offline)"), turning the guard and revert notifications on or off, starting with Windows, the log level, and the log and settings files. The shield in the icon turns grey while the guard is off.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/tray-menu.png">
-    <img src="docs/screenshots/tray-menu-light.png" alt="Tray menu: Headphones (LK12): 36%, Devices submenu (Headphones (G2) and Headphones (LK12) guarded, G2 not connected; Speakers (JBL Flip 4) not guarded, not connected), Guard enabled, Notify when a jump is reverted, Start with Windows, Log, Open settings, Reload settings, Exit">
+    <img src="docs/screenshots/tray-menu-light.png" alt="Tray menu: Headphones (LK12): 36%, Devices submenu (Headphones (G2) and Headphones (LK12) guarded, G2 offline; Speakers (JBL Flip 4) not guarded, offline), Guard enabled, Notify when a jump is reverted, Start with Windows, Log, Open settings, Reload settings, Exit">
   </picture>
 </p>
 

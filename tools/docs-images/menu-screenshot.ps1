@@ -28,9 +28,8 @@ $main = Capture-Menu @(
   $devicesItem,
   (Item 'Guard enabled' $true), (Item 'Notify when a jump is reverted' $true), (Item 'Start with Windows' $true), (Sep),
   $logItem, (Item 'Open settings'), (Item 'Reload settings'), (Sep), (Item 'Exit'))
-function Grey($i) { $i.ForeColor = [Drawing.SystemColors]::GrayText; $i }
 $sub = Capture-Menu @(
-  (Grey (Item 'Headphones (G2)' $true)), (Item 'Headphones (LK12)' $true), (Grey (Item 'Speakers (JBL Flip 4)')))
+  (Item 'Headphones (G2) (offline)' $true), (Item 'Headphones (LK12)' $true), (Item 'Speakers (JBL Flip 4) (offline)'))
 
 function Compose($menuBmp, $subBmp, $subTop, $out) {
   $pad = 16; $barH = 48; $gap = 8

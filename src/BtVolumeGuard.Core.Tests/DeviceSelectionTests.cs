@@ -52,4 +52,10 @@ public class DeviceSelectionTests
         Assert.Equal(
             "all Bluetooth devices except Speakers (JBL Flip 4)",
             new DeviceSelection(["Speakers (JBL Flip 4)"]).ToString());
+
+    [Theory]
+    [InlineData(true, "Headphones (LK12)")]
+    [InlineData(false, "Headphones (LK12) (offline)")]
+    public void Menu_text_marks_devices_that_are_not_connected(bool connected, string expected) =>
+        Assert.Equal(expected, new KnownDevice("Headphones (LK12)", connected, Guarded: true).MenuText);
 }

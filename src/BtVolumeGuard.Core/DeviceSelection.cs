@@ -52,4 +52,11 @@ public sealed class DeviceSelection
 }
 
 /// <summary>A device offered in the tray menu: one friendly name, possibly several endpoints.</summary>
-public sealed record KnownDevice(string Name, bool Connected, bool Guarded);
+public sealed record KnownDevice(string Name, bool Connected, bool Guarded)
+{
+    /// <summary>
+    /// Text of the menu entry. Windows only knows that a device is not connected (switched off,
+    /// out of range or not reachable), hence "offline". Display only: exclusions use <see cref="Name"/>.
+    /// </summary>
+    public string MenuText => Connected ? Name : $"{Name} (offline)";
+}
