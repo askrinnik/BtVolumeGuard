@@ -37,6 +37,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private bool _settingsFileUsable;
     private DeviceNameMask? _testMask;
     private EndpointVolumeGuard? _guard;
+    private AboutForm? _aboutForm;
     private bool _exiting;
 
     /// <param name="maskOverride">Device mask from the command line; overrides the settings file.</param>
@@ -77,6 +78,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             new ToolStripMenuItem("Open settings", null, (_, _) => OpenFile(AppSettings.DefaultPath)),
             new ToolStripMenuItem("Reload settings", null, (_, _) => StartGuard()),
             new ToolStripSeparator(),
+            new ToolStripMenuItem("About BtVolumeGuard…", null, (_, _) => ShowAbout()),
             new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()),
         ]);
         menu.Opening += (_, _) => UpdateMenu();
@@ -94,6 +96,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     protected override void ExitThreadCore()
     {
         _exiting = true;
+        _aboutForm?.Close();
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         StopGuard();
         _trayIcon.Visible = false;
@@ -259,6 +262,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _guard.SetSelection(selection);
     }
 
+    // Modeless, one window at a time: a second click brings the open one to the front.
+    private void ShowAbout()
+    {
+        if (_aboutForm is null)
+        {
+            _aboutForm = new AboutForm();
+            _aboutForm.FormClosed += (sender, _) =>
+            {
+                ((Form)sender!).Dispose();
+                _aboutForm = null;
+            };
+            _aboutForm.Show();
+        }
+
+        _aboutForm.Activate();
+    }
+
     private void UpdateLogMenu()
     {
         foreach (ToolStripMenuItem item in _logLevelItems)
@@ -278,7 +298,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        string text = $"BtVolumeGuard: {(_settings.GuardEnabled ? "on" : "off")}\n{DescribeEndpoints("\n")}";
+        string text = $"BtVolumeGuard {AboutForm.Current.Version}: {(_settings.GuardEnabled ? "on" : "off")}\n{DescribeEndpoints("\n")}";
         _trayIcon.Text = text.Length <= MaxTooltipLength ? text : text[..(MaxTooltipLength - 1)] + "…";
     }
 

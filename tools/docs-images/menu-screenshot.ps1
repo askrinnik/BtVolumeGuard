@@ -27,7 +27,7 @@ $main = Capture-Menu @(
   (Item 'Headphones (LK12): 36%' $false $false), (Sep),
   $devicesItem,
   (Item 'Guard enabled' $true), (Item 'Notify when a jump is reverted' $true), (Item 'Start with Windows' $true), (Sep),
-  $logItem, (Item 'Open settings'), (Item 'Reload settings'), (Sep), (Item 'Exit'))
+  $logItem, (Item 'Open settings'), (Item 'Reload settings'), (Sep), (Item 'About BtVolumeGuard…'), (Item 'Exit'))
 $sub = Capture-Menu @(
   (Item 'Headphones (G2) (offline)' $true), (Item 'Headphones (LK12)' $true), (Item 'Speakers (JBL Flip 4) (offline)'))
 
